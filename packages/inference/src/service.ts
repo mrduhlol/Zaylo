@@ -189,7 +189,13 @@ export class InferenceService {
           // Graceful fallback if LoftyDB is offline or unreachable
         }
 
-        if (this.memoryEngine.isAutoExtractEnabled() && request.memory !== false) {
+      }
+
+      // Explicit save preference is independent of recall. Existing API callers retain
+      // the previous behavior when memorySave is omitted.
+      const shouldSaveMemory = request.memorySave ?? (shouldUseMemory && request.memory !== false);
+      if (this.memoryEngine && lastUserText && shouldSaveMemory) {
+        if (this.memoryEngine.isAutoExtractEnabled()) {
           this.memoryEngine
             .extractAndPersistFromUserMessage(lastUserText, {
               personaId: request.personaId,
