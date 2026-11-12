@@ -20,6 +20,8 @@ import type {
 } from './types';
 import { PlaygroundToolbar } from './components/PlaygroundToolbar';
 import { ConversationArea } from './components/ConversationArea';
+import { ChatBackground } from './components/ChatBackground';
+import { chatDrafts, mayRecallMemory, maySaveMemory, type ChatPrivacy } from './hooks/chatSession';
 import { MessageComposer } from './components/MessageComposer';
 import { PerformancePanel } from './components/PerformancePanel';
 import { SettingsDrawer } from './components/SettingsDrawer';
@@ -49,7 +51,7 @@ const DEFAULT_SETTINGS: GenerationSettings = {
 const STORAGE_KEY = 'zaylo_playground_conversations_v3';
 const SETTINGS_KEY = 'zaylo_playground_settings_v3';
 
-export const PlaygroundView: React.FC = () => {
+export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string, index: number, text: string) => void }> = ({ onBranchPrompt }) => {
   const {
     availableModels,
     installedModels,
@@ -59,10 +61,8 @@ export const PlaygroundView: React.FC = () => {
     currentMetric,
     ragEnabled,
     ragDocuments,
-    pendingImage,
     startServer,
     setRagEnabled,
-    setPendingImage,
     fetchRagDocuments,
     addRagDocument,
     deleteRagDocument,
@@ -99,6 +99,9 @@ export const PlaygroundView: React.FC = () => {
     persistConversationToLoftyDb,
   } = useAppStore();
 
+  const [, refreshAttachments] = useState(0);
+  const stopRequestedRef = useRef(false);
+  const streamRequestIdRef = useRef<string | null>(null);
   const [externalInput, setExternalInput] = useState<string>('');
 
   // Fine-Tuned Models from Forge
@@ -128,7 +131,7 @@ export const PlaygroundView: React.FC = () => {
 
   // Streaming & Generation State
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
+  const [, setActiveRequestId] = useState<string | null>(null);
   const [liveStats, setLiveStats] = useState<{
     tokensPerSec: number;
     tokenCount: number;
@@ -180,7 +183,7 @@ export const PlaygroundView: React.FC = () => {
   // Persist conversations
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations.filter(c => !(c as ChatPrivacy).temporary)));
     } catch {
       // Ignored
     }
@@ -294,7 +297,19 @@ export const PlaygroundView: React.FC = () => {
 
   // Current active conversation
   const activeConv = conversations.find((c) => c.id === activeConvId) || conversations[0];
+  const privacy = activeConv as ChatPrivacy | undefined;
+  const pendingImage = chatDrafts.get(activeConvId)?.image;
+  const setPendingImage = (image?: { dataUrl: string; name: string }) => {
+    const draft = chatDrafts.get(activeConvId);
+    chatDrafts.set(activeConvId, { text: draft?.text || '', image });
+    refreshAttachments(n => n + 1);
+  };
+  const persistPrivateConversation = (conversation: Parameters<typeof persistConversationToLoftyDb>[0]) => {
+    if (maySaveMemory(conversation as ChatPrivacy)) return persistConversationToLoftyDb(conversation);
+  };
   const activeModel = unifiedModels.find((m) => m.id === selectedModelId) || unifiedModels[0];
+
+  useEffect(() => { setExternalInput(''); }, [activeConvId]);
 
   // Resolve persona for active conversation
   const activeConvPersona = useMemo(() => {
@@ -454,12 +469,12 @@ export const PlaygroundView: React.FC = () => {
       })
     );
     if (clearedConv) {
-      void persistConversationToLoftyDb(clearedConv);
+      void persistPrivateConversation(clearedConv);
     }
   };
 
   const handleSaveMessageToMemory = async (text: string) => {
-    if (!text.trim() || !loftyDbStatus?.connected) return;
+    if (!text.trim() || !loftyDbStatus?.connected || !maySaveMemory(privacy)) return;
     try {
       await saveMemory({
         content: text.trim().slice(0, 600),
@@ -492,6 +507,7 @@ export const PlaygroundView: React.FC = () => {
         }
       : { role: 'user', content: userText.trim() };
 
+    chatDrafts.set(activeConvId, { text: '' });
     setPendingImage(undefined);
 
     // Build message payload
@@ -533,6 +549,8 @@ export const PlaygroundView: React.FC = () => {
     );
 
     setIsGenerating(true);
+    stopRequestedRef.current = false;
+    streamRequestIdRef.current = null;
     activeStreamContentRef.current = '';
     streamTokenCountRef.current = 0;
     streamStartTimeRef.current = performance.now();
@@ -543,6 +561,8 @@ export const PlaygroundView: React.FC = () => {
 
     // Listen to real streamed token chunks
     const unsubChunk = api.on('inference:chunk', (data: { requestId: string; chunk: ChatCompletionResponse }) => {
+      streamRequestIdRef.current = data.requestId;
+      if (stopRequestedRef.current) { void api.invoke('inference:abort', { requestId: data.requestId }); return; }
       const delta = data.chunk.choices[0]?.delta?.content;
       if (delta) {
         if (!firstTokenTimeRef.current) {
@@ -598,7 +618,8 @@ export const PlaygroundView: React.FC = () => {
         stream: true,
         rag: ragEnabled,
         ragDocumentIds: selectedRagDocIds.length > 0 ? selectedRagDocIds : undefined,
-        memory: memoryEnabled && Boolean(loftyDbStatus?.connected),
+        // Current inference API couples recall and extraction: disable both when saving is forbidden.
+        memory: memoryEnabled && mayRecallMemory(privacy) && maySaveMemory(privacy) && Boolean(loftyDbStatus?.connected),
         conversationId: activeConvId,
         personaId: resolvedPersona?.id,
       });
@@ -678,12 +699,13 @@ export const PlaygroundView: React.FC = () => {
         })
       );
       if (finalizedConv) {
-        void persistConversationToLoftyDb(finalizedConv);
+        void persistPrivateConversation(finalizedConv);
       }
       if (loftyDbStatus?.connected) {
         void fetchMemories();
       }
     } catch (err: any) {
+      if (stopRequestedRef.current) return;
       const rawError = err?.message || 'Inference request failed';
       let errorMsg = `[Error: ${rawError}]`;
 
@@ -710,10 +732,11 @@ export const PlaygroundView: React.FC = () => {
 
   // Stop active generation
   const handleStopGeneration = () => {
-    if (activeRequestId) {
-      api.invoke('inference:abort', { requestId: activeRequestId });
+    stopRequestedRef.current = true;
+    if (streamRequestIdRef.current) {
+      void api.invoke('inference:abort', { requestId: streamRequestIdRef.current });
     }
-    setIsGenerating(false);
+    // Keep generation locked until the request settles, including cancellation before first token.
   };
 
   const appendTurnToActiveConversation = (
@@ -737,7 +760,7 @@ export const PlaygroundView: React.FC = () => {
       })
     );
     if (updatedConv) {
-      void persistConversationToLoftyDb(updatedConv);
+      void persistPrivateConversation(updatedConv);
     }
   };
 
@@ -781,15 +804,7 @@ export const PlaygroundView: React.FC = () => {
         ? (lastUserMsg.content.find((p) => p.type === 'text') as any)?.text || ''
         : '';
 
-    // Remove the last assistant message
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === activeConvId
-          ? { ...c, messages: c.messages.slice(0, realIndex), updatedAt: Date.now() }
-          : c
-      )
-    );
-
+    // Retain the original response and retry as a new turn; parent may branch edited prompts.
     handleSendMessage(promptText);
   };
 
@@ -832,10 +847,40 @@ export const PlaygroundView: React.FC = () => {
 
   const isVisionSupported = Boolean(activeModel?.isVisionSupported);
 
+  const composer = (
+            <MessageComposer
+              key={activeConvId}
+              conversationId={activeConvId}
+              onSendMessage={handleSendMessage}
+              onStopGeneration={handleStopGeneration}
+              isGenerating={isGenerating}
+              serverState={serverState}
+              isVisionSupported={isVisionSupported}
+              pendingImage={pendingImage}
+              onSetPendingImage={setPendingImage}
+              ragEnabled={ragEnabled}
+              ragDocsCount={ragDocuments.length}
+              onOpenRagModal={() => setIsRagModalOpen(true)}
+              onToggleRag={() => setRagEnabled(!ragEnabled)}
+              memoryEnabled={memoryEnabled && mayRecallMemory(privacy) && maySaveMemory(privacy)}
+              memoryCount={memories.length}
+              loftyDbConnected={Boolean(loftyDbStatus?.connected)}
+              onToggleMemory={privacy?.temporary ? undefined : () => setMemoryEnabled(!memoryEnabled)}
+              onOpenMemorySection={() => setActiveTab('loftydb')}
+              onStartServer={handleStartServer}
+              isStartingServer={isStartingServer}
+              externalInput={externalInput}
+              onClearExternalInput={() => setExternalInput('')}
+              onOpenChartModal={() => setIsChartModalOpen(true)}
+              onOpenPresentationModal={() => setIsPresentationModalOpen(true)}
+            />
+  );
+
   return (
-    <div className="flex h-full w-full bg-white dark:bg-[#090909] text-[#111111] dark:text-[#F5F5F5] overflow-hidden relative font-sans">
+    <div className="flex h-full w-full bg-[var(--background)] text-[var(--foreground)] overflow-hidden relative font-sans">
       {/* Main Workspace Column */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white dark:bg-[#090909]">
+      <div className="relative isolate flex-1 flex flex-col min-w-0 overflow-hidden bg-[var(--background)]">
+        <ChatBackground conversationId={activeConvId} active={!activeModel?.isImageModel && !isCompareMode && !activeConv?.messages.length} />
         {/* Top Toolbar */}
         <PlaygroundToolbar
           models={unifiedModels}
@@ -924,6 +969,8 @@ export const PlaygroundView: React.FC = () => {
         ) : (
           <>
             <ConversationArea
+              composer={composer}
+              onEditPrompt={(index, text) => onBranchPrompt ? onBranchPrompt(activeConvId, index, text) : setExternalInput(text)}
               messages={activeConv?.messages || []}
               isGenerating={isGenerating}
               selectedModel={activeModel}
@@ -932,34 +979,11 @@ export const PlaygroundView: React.FC = () => {
               onRegenerate={handleRegenerate}
               onRetry={handleRegenerate}
               onClearConversation={handleClearConversation}
-              onSaveToMemory={loftyDbStatus?.connected ? handleSaveMessageToMemory : undefined}
+              onSaveToMemory={loftyDbStatus?.connected && maySaveMemory(privacy) ? handleSaveMessageToMemory : undefined}
             />
 
             {/* Bottom Message Composer */}
-            <MessageComposer
-              onSendMessage={handleSendMessage}
-              onStopGeneration={handleStopGeneration}
-              isGenerating={isGenerating}
-              serverState={serverState}
-              isVisionSupported={isVisionSupported}
-              pendingImage={pendingImage}
-              onSetPendingImage={setPendingImage}
-              ragEnabled={ragEnabled}
-              ragDocsCount={ragDocuments.length}
-              onOpenRagModal={() => setIsRagModalOpen(true)}
-              onToggleRag={() => setRagEnabled(!ragEnabled)}
-              memoryEnabled={memoryEnabled}
-              memoryCount={memories.length}
-              loftyDbConnected={Boolean(loftyDbStatus?.connected)}
-              onToggleMemory={() => setMemoryEnabled(!memoryEnabled)}
-              onOpenMemorySection={() => setActiveTab('loftydb')}
-              onStartServer={handleStartServer}
-              isStartingServer={isStartingServer}
-              externalInput={externalInput}
-              onClearExternalInput={() => setExternalInput('')}
-              onOpenChartModal={() => setIsChartModalOpen(true)}
-              onOpenPresentationModal={() => setIsPresentationModalOpen(true)}
-            />
+            {Boolean(activeConv?.messages.length) && composer}
           </>
         )}
       </div>
