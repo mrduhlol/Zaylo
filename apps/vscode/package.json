@@ -2,7 +2,7 @@
   "name": "zaylo-vscode",
   "displayName": "Zaylo AI - Local Codebase Assistant",
   "description": "Local AI Code Assistant powered by Zaylo. Connects to your local AI engine for autonomous agent coding, code completion, and sidebar chat.",
-  "version": "3.2.0",
+  "version": "4.0.0",
   "publisher": "zaylo",
   "engines": {
     "vscode": "^1.85.0"
