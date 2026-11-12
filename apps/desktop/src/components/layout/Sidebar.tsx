@@ -1,3 +1,4 @@
+import { collapsedTitlebarInsets } from './titlebar';
 import { createPortal } from 'react-dom';
 import { ChatMemoryInspector } from '../../features/conversations/ChatMemoryInspector';
 import { exportChatPdf } from '../../api/exportChatPdf';
@@ -101,6 +102,7 @@ export const Sidebar: React.FC = () => {
   const [memoryChat, setMemoryChat] = useState<SidebarConversation | null>(null);
   const { builderMode, collapsedSections, toggleSection, themeFamily } = useWorkspacePreferences();
   const headerArtwork = themeArtwork[themeFamily] || themeArtwork.iris;
+  const titlebarInsets = collapsedTitlebarInsets();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
@@ -433,7 +435,7 @@ export const Sidebar: React.FC = () => {
     >
       {isSidebarCollapsed ? createPortal(
         /* Collapsed: no rail, no logo — just the reopen toggle; space is reclaimed. */
-        <div className="fixed top-[18px] left-2 z-40">
+        <div style={{ left: titlebarInsets.toggleLeft }} className="fixed top-[18px] z-40">
           <button
             onClick={toggleSidebar}
             className="[-webkit-app-region:no-drag] p-1.5 rounded-md text-zinc-400 dark:text-[#A1A1AA] hover:text-zinc-700 dark:hover:text-[#F5F5F5] hover:bg-zinc-100 dark:hover:bg-[#202020] transition-colors"
