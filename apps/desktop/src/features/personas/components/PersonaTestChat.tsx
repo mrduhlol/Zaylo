@@ -34,12 +34,11 @@ export function PersonaTestChat({ persona, onClose }: { persona: Persona; onClos
     if (!instance || instance.state !== 'RUNNING') { setError('Load a local chat model before testing a persona.'); return; }
     const next: ChatMessage[] = [...messages.slice(-12), { role: 'user', content: prompt.trim() }];
     setMessages(next); setPrompt(''); setAnswer(''); setError(''); setBusy(true);
-    const current = { cancelled: false, id: undefined as string | undefined };
+    const current = { cancelled: false, id: crypto.randomUUID() };
     request.current = current;
     let content = '';
     const unsubscribe = api.on('inference:chunk', ({ requestId, chunk }) => {
       if (request.current !== current) return;
-      if (!current.id) current.id = requestId;
       if (current.id !== requestId) return;
       if (current.cancelled) { void api.invoke('inference:abort', { requestId }).catch(() => {}); return; }
       content += chunk.choices[0]?.delta?.content || '';
@@ -47,6 +46,7 @@ export function PersonaTestChat({ persona, onClose }: { persona: Persona; onClos
     });
     try {
       const result = await api.invoke('inference:chat', {
+        clientRequestId: current.id,
         model: instance.modelName || 'default',
         messages: PersonaPromptAdapter.augmentMessages(next, persona),
         stream: true, memory: false, rag: false, max_tokens: 512,
