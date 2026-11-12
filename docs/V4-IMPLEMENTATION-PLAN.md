@@ -140,7 +140,7 @@ The combined implementation is committed and pushed on the fork's
 `feat/v4-workspace` branch. Its manifests and native version metadata are prepared
 for 4.0.0; no release or installer has been published.
 
-Focused upstream drafts currently open:
+Focused upstream PRs currently open (#3–#5 ready for review; #6–#7 remain drafts):
 
 - [#3 — Appearance foundation](https://github.com/loftytechlabs-dev/Zaylo/pull/3):
   palettes, offline fonts, shared artwork, presentation preferences and effects.
@@ -153,10 +153,18 @@ Focused upstream drafts currently open:
 - [#7 — Personas](https://github.com/loftytechlabs-dev/Zaylo/pull/7):
   gallery/editor, defaults, per-chat selection, import/export and previews.
 
-The independent 3.3.0 security/stability work is in upstream PRs #1 and #2.
-Its validated fixes are carried forward in the combined 4.0 branch. Review the
-prerequisites before merging dependent drafts; shared-store overlap must be
-updated against the accepted upstream base. Do not force-push published history.
+The independent 3.3.0 security/stability PRs #1 and #2 are merged into upstream
+main. PRs #3–#5 now include that main through merge commits, preserving published
+history; #5 no longer duplicates the server authentication change. Their focused
+tests and desktop typechecks pass, and GitHub reports all three as mergeable.
+
+The owner's two #6 findings are fixed and pushed there and in the integration
+branch: startup selects the empty/new conversation, and deleting temporary chats
+retains neither Trash nor Undo copies. Nineteen lifecycle/persona regressions and
+desktop typechecks pass on both branches. The integration rerun needed a longer
+test timeout for a cold store import. Keep #6 and #7 as drafts until #3–#5 land,
+then reconcile the shared preference/store overlaps against the accepted base.
+Do not force-push published history.
 
 Three follow-up topics remain to be submitted from that accepted base:
 
