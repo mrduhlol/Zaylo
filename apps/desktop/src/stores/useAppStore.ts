@@ -291,7 +291,7 @@ function loadStoredConversations(initialPersonaId?: string): { conversations: Pl
         if (Array.isArray(parsed) && parsed.length > 0) {
           return {
             conversations: savedHistory(parsed),
-            activeConvId: parsed.find((chat: PlaygroundConversation) => chat.id === localStorage.getItem('zaylo_active_conversation') && !chat.archivedAt && !chat.temporary)?.id || parsed.find((chat: PlaygroundConversation) => !chat.archivedAt && !chat.temporary)?.id || '',
+            activeConvId: parsed.find((chat: PlaygroundConversation) => chat.id === loadLocal<string>('zaylo_active_conversation', '') && !chat.archivedAt && !chat.temporary)?.id || parsed.find((chat: PlaygroundConversation) => !chat.archivedAt && !chat.temporary)?.id || '',
           };
         }
       }
@@ -321,6 +321,12 @@ function storeLocal(key: string, value: unknown) {
 }
 
 const initialConvsData = loadStoredConversations();
+if (!initialConvsData.activeConvId) {
+  const now = Date.now();
+  const fresh: PlaygroundConversation = { id: `conv_${crypto.randomUUID()}`, title: 'New Chat', modelId: '', modelName: '', messages: [], createdAt: now, updatedAt: now };
+  initialConvsData.conversations.unshift(fresh);
+  initialConvsData.activeConvId = fresh.id;
+}
 
 export const useAppStore = create<AppStore>((set, get) => ({
   activeTab: 'playground',
@@ -375,6 +381,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     return newId;
   },
   selectChat: (id) => {
+    if (!get().conversations.some(chat => chat.id === id && !chat.archivedAt)) return;
     set({ activeConvId: id, activeTab: 'playground' });
   },
   deletedChats: loadLocal<PlaygroundConversation[]>('zaylo_deleted_chats', []),
