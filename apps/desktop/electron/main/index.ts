@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { registerIpcHandlers } from '../ipc/handlers.js';
+import { registerVoiceHandlers } from '../voice/registerVoiceHandlers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -90,6 +91,8 @@ async function createWindow() {
     },
   });
 
+  if (process.platform !== 'darwin') mainWindow.setMenu(null);
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https:') || url.startsWith('http:')) {
       shell.openExternal(url);
@@ -111,7 +114,9 @@ async function createWindow() {
 
   try {
     await performCleanup();
-    cleanupHandlers = await registerIpcHandlers(mainWindow);
+    const stopAppServices = await registerIpcHandlers(mainWindow);
+    const stopVoice = registerVoiceHandlers(mainWindow);
+    cleanupHandlers = async () => { stopVoice(); await stopAppServices(); };
   } catch (err) {
     console.error('[Electron Main] Error registering IPC handlers:', err);
   }
