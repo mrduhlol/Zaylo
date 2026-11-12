@@ -1,5 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
+
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...await importOriginal<typeof import('node:child_process')>(),
+  execSync: vi.fn(),
+}));
 import fs from 'node:fs';
 import os from 'node:os';
 import { createDatabaseAsync, TrainingJobRepository, FineTunedModelRepository } from '@local-ai/database';
@@ -37,15 +43,36 @@ describe('Forge In-App Fine-Tuning Studio Tests', () => {
     } catch {}
   });
 
+  beforeEach(() => {
+    vi.mocked(execSync).mockReset();
+    vi.mocked(execSync).mockReturnValue(JSON.stringify({
+      success: true, torch: '2.5.0', transformers: '4.46.0', peft: '0.13.0', mps: false, cuda: false,
+    }));
+    PythonDetector.detect(true);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
   // 1. Python Environment Detection
   it('should detect python 3 with PyTorch, Transformers, and PEFT', () => {
-    const pyInfo = PythonDetector.detect();
+    const pyInfo = PythonDetector.detect(true);
     expect(pyInfo.available).toBe(true);
     expect(pyInfo.pythonPath).toBeDefined();
     expect(pyInfo.versions?.torch).toBeDefined();
     expect(pyInfo.versions?.transformers).toBeDefined();
     expect(pyInfo.versions?.peft).toBeDefined();
   }, 15000);
+
+  it('reports unavailable Python environments and retries later candidates', () => {
+    vi.mocked(execSync).mockImplementation(() => { throw new Error('Python unavailable'); });
+    expect(PythonDetector.detect(true)).toMatchObject({ available: false });
+    vi.mocked(execSync).mockReset();
+    vi.mocked(execSync)
+      .mockImplementationOnce(() => { throw new Error('First candidate unavailable'); })
+      .mockReturnValue(JSON.stringify({ success: true, torch: '2.5', transformers: '4.46', peft: '0.13' }));
+    expect(PythonDetector.detect(true).available).toBe(true);
+    expect(execSync).toHaveBeenCalledTimes(2);
+  });
 
   // 2. Model Inspection & Compatibility Analysis
   it('should inspect installed GGUF models and detect checkpoint requirement', () => {
@@ -63,18 +90,25 @@ describe('Forge In-App Fine-Tuning Studio Tests', () => {
       contextLength: 4096,
     };
 
+    vi.spyOn(ModelInspector, 'findLocalHfCheckpoint').mockReturnValue(null);
     const inspection = ModelInspector.inspectModel(dummyGguf);
     expect(inspection.modelId).toBe('smollm2-135m');
     expect(inspection.format).toBe('gguf');
     expect(inspection.supportedBackends).toContain('peft');
 
-    // If checkpoint was downloaded in ~/.cache/huggingface, it detects it as READY, or REQUIRES_CHECKPOINT
-    expect(['READY', 'REQUIRES_CHECKPOINT']).toContain(inspection.status);
-    if (inspection.status === 'READY') {
-      expect(inspection.checkpointPath).toBeDefined();
-    } else {
-      expect(inspection.hfRepoId).toBe('HuggingFaceTB/SmolLM2-135M-Instruct');
-    }
+    expect(inspection.status).toBe('REQUIRES_CHECKPOINT');
+    expect(inspection.hfRepoId).toBe('HuggingFaceTB/SmolLM2-135M-Instruct');
+
+    vi.mocked(ModelInspector.findLocalHfCheckpoint).mockReturnValue(tempDir);
+    const ready = ModelInspector.inspectModel(dummyGguf);
+    expect(ready.status).toBe('READY');
+    expect(ready.checkpointPath).toBe(tempDir);
+
+    vi.mocked(execSync).mockReturnValue(JSON.stringify({ success: false, error: 'No module named torch' }));
+    PythonDetector.detect(true);
+    const missing = ModelInspector.inspectModel(dummyGguf);
+    expect(missing.status).toBe('MISSING_DEPENDENCIES');
+    expect(missing.statusReason).toContain('No module named torch');
   });
 
   // 3. Dataset Parsing & Validation
