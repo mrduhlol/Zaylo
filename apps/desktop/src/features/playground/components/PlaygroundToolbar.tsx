@@ -70,7 +70,7 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
-  const selectedModel = models.find((m) => m.id === selectedModelId) || models[0];
+  const selectedModel = models.find((m) => m.id === selectedModelId);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -126,7 +126,7 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
 
       {/* Right Controls: Compare, History, More */}
       <div className="flex items-center gap-1.5">
-        {builderMode && <SystemStatusPopover />}
+        <SystemStatusPopover />
         {/* Compare Control */}
         {builderMode && <button
           onClick={onToggleCompare}
