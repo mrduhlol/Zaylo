@@ -429,8 +429,8 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside
-      className={`bg-white dark:bg-[#0D0D0D] border-r border-[#eaeaea] dark:border-[#262626] flex flex-col select-none shrink-0 h-screen transition-all duration-200 overflow-hidden ${
-        isSidebarCollapsed ? 'w-0 border-0' : 'w-[280px]'
+      className={`bg-white dark:bg-[#0D0D0D] border-[#eaeaea] dark:border-[#262626] flex flex-col select-none shrink-0 h-screen transition-all duration-200 overflow-hidden ${
+        isSidebarCollapsed ? 'w-0 border-0' : 'w-[280px] border-r'
       }`}
     >
       {isSidebarCollapsed ? createPortal(
