@@ -245,6 +245,7 @@ export const Sidebar: React.FC = () => {
     return (
       <div
         key={conv.id}
+        data-sidebar-chat-id={conv.id}
         onClick={() => selectChat(conv.id)}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -371,6 +372,14 @@ export const Sidebar: React.FC = () => {
       )}
 
       <button onClick={() => setActiveTab('library')} className={navButtonClass(activeTab === 'library')}><span>Library</span></button>
+      {/* Pinned — only rendered when populated */}
+      {pinnedChats.length > 0 && (
+        <div className="mb-1">
+          {renderSectionHeader('pinned', 'Pinned', pinnedChats.length, pinnedExpanded)}
+          {pinnedExpanded && <div className="space-y-1 mt-0.5">{pinnedChats.map(renderChatRow)}</div>}
+        </div>
+      )}
+
       {renderSectionHeader('projects', 'Projects', matchingProjects.length, !collapsedSections['projects'])}
       {!collapsedSections['projects'] && <div className="space-y-1 mb-3">
         <button onClick={() => { selectProject(undefined); setActiveTab('projects'); }} className="text-xs px-3 py-2 text-[var(--muted-foreground)]">Manage projects</button>
@@ -386,14 +395,6 @@ export const Sidebar: React.FC = () => {
       {searchQuery && matchingProjects.length === 0 && pinnedChats.length === 0 && recentChats.length === 0 && (
         <div className="px-2 py-4 text-[11px] text-zinc-400 dark:text-[#737373]">
           No chats match “{searchQuery}”.
-        </div>
-      )}
-
-      {/* Pinned — only rendered when populated */}
-      {pinnedChats.length > 0 && (
-        <div className="mb-1">
-          {renderSectionHeader('pinned', 'Pinned', pinnedChats.length, pinnedExpanded)}
-          {pinnedExpanded && <div className="space-y-1 mt-0.5">{pinnedChats.map(renderChatRow)}</div>}
         </div>
       )}
 
