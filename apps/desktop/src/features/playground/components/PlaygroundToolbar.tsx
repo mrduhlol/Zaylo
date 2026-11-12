@@ -1,14 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
+import * as Select from '@radix-ui/react-select';
+import { Check, ChevronDown } from 'lucide-react';
+import { useWorkspacePreferences } from '../../../stores/useWorkspacePreferences';
 import {
   Box,
-  ChevronDown,
   Columns2,
   Clock,
   MoreHorizontal,
   Sliders,
   Activity,
   Trash2,
-  Check,
   Power,
   Sun,
   Moon,
@@ -62,8 +63,8 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
   onCreatePersona,
   onClearConversation,
 }) => {
-  const { theme, toggleTheme, startServer, stopServer } = useAppStore();
-  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const builderMode = useWorkspacePreferences((state) => state.builderMode);
+  const { theme, toggleTheme, startServer, stopServer, setActiveTab } = useAppStore();
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
   const modelDropdownRef = useRef<HTMLDivElement>(null);
@@ -75,79 +76,40 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
-        setIsModelDropdownOpen(false);
+
       }
       if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
         setIsMoreMenuOpen(false);
       }
     };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setIsMoreMenuOpen(false); moreMenuRef.current?.querySelector('button')?.focus(); }
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => { document.removeEventListener('mousedown', handleClickOutside); document.removeEventListener('keydown', handleEscape); };
   }, []);
 
   return (
-    <div className="h-[76px] px-6 border-b border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#090909] flex items-center justify-between select-none shrink-0 z-20">
+    <div className="min-h-16 px-3 sm:px-6 py-3 gap-2 border-b border-[var(--border)] bg-[var(--background)] flex items-center justify-between select-none shrink-0 z-20">
       {/* Left Controls: Model Pill & Persona Pill */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         {/* Model Selector Pill */}
         <div className="relative inline-block" ref={modelDropdownRef}>
-          <button
-            type="button"
-            onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white dark:bg-[#141414] hover:bg-zinc-50 dark:hover:bg-[#202020] border border-[#eaeaea] dark:border-[#262626] text-xs font-medium text-[#111111] dark:text-[#F5F5F5] transition-colors shadow-xs"
-            title="Select AI Model"
-          >
-            <Box className="w-3.5 h-3.5 text-zinc-600 dark:text-[#A1A1AA] shrink-0" />
-            <span className="truncate max-w-[140px] sm:max-w-[180px] font-sans">
-              {isLoadingModel ? 'Loading...' : selectedModel?.name || 'Select Model'}
-            </span>
-            <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 dark:text-[#737373] transition-transform duration-150 shrink-0 ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
-          </button>
-
-          {/* Model Dropdown Popup */}
-          {isModelDropdownOpen && (
-            <div className="absolute left-0 mt-1.5 w-72 rounded-xl bg-white dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] shadow-xl py-1.5 z-50 text-xs overflow-hidden select-none animate-in fade-in zoom-in-95 duration-100">
-              <div className="px-3 py-1.5 border-b border-[#eaeaea] dark:border-[#222222] flex items-center justify-between">
-                <span className="text-[10px] font-mono text-zinc-500 dark:text-[#737373] uppercase tracking-wider">
-                  Available Models
-                </span>
-                <span className="text-[10px] font-mono text-zinc-400 dark:text-[#A1A1AA]">
-                  {models.length} installed
-                </span>
-              </div>
-
-              <div className="max-h-72 overflow-y-auto py-1 scrollbar-thin">
-                {models.map((m) => {
-                  const isSelected = m.id === selectedModelId;
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() => {
-                        onSelectModel(m.id);
-                        setIsModelDropdownOpen(false);
-                      }}
-                      className={`w-full px-3 py-2 text-left flex items-center justify-between transition-colors ${
-                        isSelected
-                          ? 'bg-zinc-100 dark:bg-[#202020] text-zinc-900 dark:text-[#F5F5F5] font-medium'
-                          : 'text-zinc-700 dark:text-[#A1A1AA] hover:bg-zinc-50 dark:hover:bg-[#202020]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <Box className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-zinc-900 dark:text-[#F5F5F5]' : 'text-zinc-400 dark:text-[#737373]'}`} />
-                        <div className="truncate">
-                          <span className="truncate block leading-tight">{m.name}</span>
-                          <span className="text-[10px] text-zinc-400 dark:text-[#737373] font-mono leading-none">
-                            {m.type === 'adapter' ? 'LoRA Adapter' : m.taskType || 'Text'}
-                          </span>
-                        </div>
-                      </div>
-                      {isSelected && <Check className="w-3.5 h-3.5 text-black dark:text-white shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <Select.Root value={selectedModel?.id || ''} onValueChange={onSelectModel} disabled={isLoadingModel || models.length === 0}>
+            <Select.Trigger aria-label="AI model" className="flex max-w-[160px] sm:max-w-[260px] items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs text-[var(--foreground)] hover:bg-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] disabled:opacity-60">
+              <Box className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
+              <span className="truncate"><Select.Value placeholder={models.length ? 'Select model' : 'No models installed'} /></span>
+              <Select.Icon><ChevronDown className="h-3.5 w-3.5" /></Select.Icon>
+            </Select.Trigger>
+            <Select.Portal><Select.Content position="popper" sideOffset={6} collisionPadding={12} className="z-50 max-h-[var(--radix-select-content-available-height)] max-w-[calc(100vw-24px)] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--popover)] p-1 text-xs text-[var(--popover-foreground)] shadow-lg">
+              <Select.Viewport className="max-h-72 overflow-y-auto">{models.map(model => <Select.Item key={model.id} value={model.id} className="relative cursor-default rounded-lg py-2 pl-8 pr-4 outline-none data-[highlighted]:bg-[var(--accent)]">
+                <Select.ItemIndicator className="absolute left-2 top-2"><Check className="h-4 w-4" /></Select.ItemIndicator>
+                <Select.ItemText>{model.name}</Select.ItemText>
+              </Select.Item>)}</Select.Viewport>
+            </Select.Content></Select.Portal>
+          </Select.Root>
+          {models.length === 0 && <button type="button" onClick={() => setActiveTab('models')} className="mt-1 text-xs text-[var(--muted-foreground)] underline underline-offset-4 hover:text-[var(--foreground)] focus-visible:outline focus-visible:outline-[var(--theme-accent)]">Browse models</button>}
         </div>
 
         {/* Persona Selector Pill */}
@@ -164,24 +126,24 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
 
       {/* Right Controls: Compare, History, More */}
       <div className="flex items-center gap-1.5">
-        <SystemStatusPopover />
+        {builderMode && <SystemStatusPopover />}
         {/* Compare Control */}
-        <button
+        {builderMode && <button
           onClick={onToggleCompare}
           className={`p-2 rounded-xl border transition-colors ${
             isCompareMode
               ? 'bg-zinc-100 dark:bg-[#202020] border-zinc-300 dark:border-[#262626] text-zinc-900 dark:text-[#F5F5F5]'
-              : 'bg-white dark:bg-[#141414] hover:bg-zinc-50 dark:hover:bg-[#202020] border-[#eaeaea] dark:border-[#262626] text-zinc-600 dark:text-[#A1A1AA] shadow-xs'
+              : 'bg-[var(--card)] hover:bg-[var(--accent)] border-[var(--border)] text-[var(--muted-foreground)] shadow-xs'
           }`}
           title="Compare Models side-by-side"
         >
           <Columns2 className="w-4 h-4" />
-        </button>
+        </button>}
 
         {/* History Control */}
         <button
           onClick={onToggleHistory}
-          className="p-2 rounded-xl bg-white dark:bg-[#141414] hover:bg-zinc-50 dark:hover:bg-[#202020] border border-[#eaeaea] dark:border-[#262626] text-zinc-600 dark:text-[#A1A1AA] shadow-xs transition-colors"
+          className="p-2 rounded-xl bg-[var(--card)] hover:bg-[var(--accent)] border border-[var(--border)] text-[var(--muted-foreground)] shadow-xs transition-colors"
           title="Conversation History"
         >
           <Clock className="w-4 h-4" />
@@ -191,20 +153,21 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
         <div className="relative inline-block" ref={moreMenuRef}>
           <button
             onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-            className="p-2 rounded-xl bg-white dark:bg-[#141414] hover:bg-zinc-50 dark:hover:bg-[#202020] border border-[#eaeaea] dark:border-[#262626] text-zinc-600 dark:text-[#A1A1AA] shadow-xs transition-colors"
+            className="p-2 rounded-xl bg-[var(--card)] hover:bg-[var(--accent)] border border-[var(--border)] text-[var(--muted-foreground)] shadow-xs transition-colors"
+            aria-label="More options" aria-expanded={isMoreMenuOpen}
             title="More Options"
           >
             <MoreHorizontal className="w-4 h-4" />
           </button>
 
           {isMoreMenuOpen && (
-            <div className="absolute right-0 mt-1.5 w-56 rounded-xl bg-white dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] shadow-xl py-1.5 z-50 text-xs select-none animate-in fade-in zoom-in-95 duration-100">
-              <button
+            <div className="absolute right-0 mt-1.5 w-56 rounded-xl bg-[var(--card)] border border-[var(--border)] shadow-xl py-1.5 z-50 text-xs select-none animate-in fade-in zoom-in-95 duration-100">
+              {builderMode && <> <button
                 onClick={() => {
                   onToggleSettings();
                   setIsMoreMenuOpen(false);
                 }}
-                className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-zinc-700 dark:text-[#A1A1AA] hover:bg-zinc-50 dark:hover:bg-[#202020] hover:text-[#111111] dark:hover:text-[#F5F5F5] transition-colors"
+                className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] transition-colors"
               >
                 <Sliders className="w-4 h-4 text-zinc-500 dark:text-[#737373]" />
                 <span>Generation Parameters...</span>
@@ -215,18 +178,18 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
                   onTogglePerformance();
                   setIsMoreMenuOpen(false);
                 }}
-                className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-zinc-700 dark:text-[#A1A1AA] hover:bg-zinc-50 dark:hover:bg-[#202020] hover:text-[#111111] dark:hover:text-[#F5F5F5] transition-colors"
+                className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] transition-colors"
               >
                 <Activity className="w-4 h-4 text-zinc-500 dark:text-[#737373]" />
                 <span>Performance Monitor</span>
-              </button>
+              </button></>}
 
               <button
                 onClick={() => {
                   toggleTheme();
                   setIsMoreMenuOpen(false);
                 }}
-                className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-zinc-700 dark:text-[#A1A1AA] hover:bg-zinc-50 dark:hover:bg-[#202020] hover:text-[#111111] dark:hover:text-[#F5F5F5] transition-colors"
+                className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] transition-colors"
               >
                 {theme === 'dark' ? (
                   <>
@@ -241,9 +204,9 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
                 )}
               </button>
 
-              <div className="border-t border-[#eaeaea] dark:border-[#222222] my-1" />
+              <div className="border-t border-[var(--border)] my-1" />
 
-              <button
+              {builderMode && <button
                 onClick={() => {
                   if (serverState === 'RUNNING') {
                     stopServer();
@@ -252,11 +215,11 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
                   }
                   setIsMoreMenuOpen(false);
                 }}
-                className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-zinc-700 dark:text-[#A1A1AA] hover:bg-zinc-50 dark:hover:bg-[#202020] hover:text-[#111111] dark:hover:text-[#F5F5F5] transition-colors"
+                className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] transition-colors"
               >
                 <Power className={`w-4 h-4 ${serverState === 'RUNNING' ? 'text-rose-500' : 'text-emerald-500'}`} />
                 <span>{serverState === 'RUNNING' ? 'Stop Local Engine' : 'Start Local Engine'}</span>
-              </button>
+              </button>}
 
               {onClearConversation && (
                 <button
