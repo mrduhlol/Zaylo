@@ -43,4 +43,30 @@ describe('persona selection and new-chat defaults', () => {
     expect(saved.find((item: { id: string }) => item.id === 'newer').personaId).toBe(first.id);
     expect(saved.find((item: { id: string }) => item.id === 'older').personaId).toBe(second.id);
   });
+  it('initializes a fresh installation/reload with the configured default greeting', async () => {
+    const { useAppStore } = await import('../apps/desktop/src/stores/useAppStore');
+    const persona = useAppStore.getState().personas.find(item => item.greetingMessage && item.id !== useAppStore.getState().defaultPersonaId)!;
+    expect(persona).toBeDefined();
+    useAppStore.getState().setDefaultPersonaId(persona.id);
+    storage.delete('zaylo_playground_conversations_v3');
+    storage.delete('zaylo_active_conversation');
+    vi.resetModules();
+    const reloaded = await import('../apps/desktop/src/stores/useAppStore');
+    const state = reloaded.useAppStore.getState();
+    const fresh = state.conversations.find(chat => chat.id === state.activeConvId)!;
+    expect(fresh.personaId).toBe(persona.id);
+    expect(fresh.messages).toEqual([{ role: 'assistant', content: persona.greetingMessage }]);
+  });
+  it('does not add a fresh chat on reload when Continue is selected', async () => {
+    const { useAppStore } = await import('../apps/desktop/src/stores/useAppStore');
+    const { useWorkspacePreferences } = await import('../apps/desktop/src/stores/useWorkspacePreferences');
+    useWorkspacePreferences.getState().setStartupBehavior('continue');
+    useAppStore.getState().setConversations([{ id: 'existing', title: 'Existing', modelId: '', modelName: '', messages: [{ role: 'user', content: 'Keep this conversation' }], createdAt: 1, updatedAt: 1 }]);
+    useAppStore.getState().selectChat('existing');
+    vi.resetModules();
+    const reloaded = await import('../apps/desktop/src/stores/useAppStore');
+    expect(reloaded.useAppStore.getState().conversations.map(chat => chat.id)).toEqual(['existing']);
+    expect(reloaded.useAppStore.getState().activeConvId).toBe('existing');
+  });
+
 });
