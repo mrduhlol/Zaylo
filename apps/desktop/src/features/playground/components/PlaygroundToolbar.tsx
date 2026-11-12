@@ -64,7 +64,7 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
   onClearConversation,
 }) => {
   const builderMode = useWorkspacePreferences((state) => state.builderMode);
-  const { theme, toggleTheme, startServer, stopServer } = useAppStore();
+  const { theme, toggleTheme, startServer, stopServer, setActiveTab } = useAppStore();
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
   const modelDropdownRef = useRef<HTMLDivElement>(null);
@@ -109,6 +109,7 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
               </Select.Item>)}</Select.Viewport>
             </Select.Content></Select.Portal>
           </Select.Root>
+          {models.length === 0 && <button type="button" onClick={() => setActiveTab('models')} className="mt-1 text-xs text-[var(--muted-foreground)] underline underline-offset-4 hover:text-[var(--foreground)] focus-visible:outline focus-visible:outline-[var(--theme-accent)]">Browse models</button>}
         </div>
 
         {/* Persona Selector Pill */}
