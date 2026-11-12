@@ -1,3 +1,4 @@
+import { hasUserPrompt } from '../hooks/chatSession';
 import React, { useRef, useEffect } from 'react';
 import {
   Code,
@@ -74,7 +75,7 @@ export const ConversationArea: React.FC<ConversationAreaProps> = ({
   return (
     <div className="relative flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-6 flex flex-col scrollbar-thin">
       {/* Empty State Welcome Screen — The Visual Centerpiece */}
-      {messages.length === 0 ? (
+      {!hasUserPrompt(messages) ? (
         <div className="flex-1 flex flex-col items-center justify-center w-full max-w-3xl mx-auto text-center space-y-7 my-auto select-none">
           {/* Prominent Clean Heading */}
           <div className="space-y-1.5">
