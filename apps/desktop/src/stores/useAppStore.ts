@@ -321,11 +321,11 @@ function storeLocal(key: string, value: unknown) {
 }
 
 const initialConvsData = loadStoredConversations();
-if (!initialConvsData.activeConvId) {
+if (!initialConvsData.activeConvId || !initialConvsData.conversations.some(chat => !chat.archivedAt && !chat.temporary && !chat.messages.some(message => message.role === 'user'))) {
   const now = Date.now();
   const fresh: PlaygroundConversation = { id: `conv_${crypto.randomUUID()}`, title: 'New Chat', modelId: '', modelName: '', messages: [], createdAt: now, updatedAt: now };
   initialConvsData.conversations.unshift(fresh);
-  initialConvsData.activeConvId = fresh.id;
+  if (!initialConvsData.activeConvId) initialConvsData.activeConvId = fresh.id;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
