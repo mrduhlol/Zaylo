@@ -11,3 +11,7 @@ export function nextBackground(count: number, previous: number, random = Math.ra
   const slot = Math.min(count - 2, Math.floor(random() * (count - 1)));
   return slot >= previous && previous >= 0 ? slot + 1 : slot;
 }
+
+/** Persona greetings do not end the empty/new-chat presentation. */
+export const hasUserPrompt = (messages?: readonly { role: string }[]) =>
+  messages?.some(message => message.role === 'user') ?? false;
