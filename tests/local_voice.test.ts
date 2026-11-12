@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { decodeVoiceAudio, LocalVoice } from '../apps/desktop/electron/voice/localVoice';
+import { decodeVoiceAudio, LocalVoice, VOICE_RUNTIME_VERSION } from '../apps/desktop/electron/voice/localVoice';
 
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map(p => fs.rm(p, { recursive: true, force: true }))); });
@@ -15,7 +15,7 @@ async function fixture(ready = false) {
     await fs.mkdir(path.dirname(bin), { recursive: true });
     // Cancellation tests must never execute this sentinel file.
     await fs.writeFile(bin, 'This must never be executed');
-    await fs.writeFile(path.join(voiceRoot, 'ready'), '1.2.1');
+    await fs.writeFile(path.join(voiceRoot, 'ready'), VOICE_RUNTIME_VERSION);
   }
   return new LocalVoice(root);
 }
@@ -40,6 +40,11 @@ describe('local voice input and cancellation boundaries', () => {
     voice.cancel();
     await expect(pending).rejects.toThrow(/cancelled/);
     expect((await voice.status()).ready).toBe(true);
+  });
+  it('does not report an incompatible installed environment as ready', async () => {
+    const voice = await fixture(true);
+    await fs.writeFile(path.join(directories[0], 'local-voice', 'ready'), '1.2.1');
+    expect((await voice.status()).ready).toBe(false);
   });
   it('cancels setup before provisioning dependencies when cancellation races readiness checks', async () => {
     const voice = await fixture();
