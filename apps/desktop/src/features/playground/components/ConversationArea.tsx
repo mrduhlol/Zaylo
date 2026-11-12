@@ -168,6 +168,15 @@ export const ConversationArea: React.FC<ConversationAreaProps> = ({
                 onRetry={isLastAssistant ? onRetry : undefined}
                 onSaveToMemory={onSaveToMemory}
               />
+              {msg.role === 'assistant' && !!msg.sources?.length && <details className="mx-3 mb-4 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm">
+                <summary className="cursor-pointer text-[var(--muted-foreground)] focus-visible:outline focus-visible:outline-[var(--theme-accent)]">Document sources · {msg.sources.length}</summary>
+                <p className="mt-2 text-xs text-[var(--muted-foreground)]">Passages retrieved for this response. Retrieval does not guarantee that every claim is supported.</p>
+                <ol className="mt-3 space-y-3">{msg.sources.map((source, sourceIndex) => <li key={`${source.chunkId}-${sourceIndex}`}>
+                  <details><summary className="cursor-pointer font-medium text-[var(--foreground)]">{source.documentName} · Passage {source.chunkIndex + 1}</summary>
+                    <blockquote className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words border-l-2 border-[var(--theme-accent)] pl-3 text-[var(--muted-foreground)]">{source.content}</blockquote>
+                  </details>
+                </li>)}</ol>
+              </details>}
               </div>
             );
           })}
