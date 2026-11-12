@@ -211,7 +211,7 @@ interface AppStore {
   toggleSidebar: () => void;
   setConversations: (updater: PlaygroundConversation[] | ((prev: PlaygroundConversation[]) => PlaygroundConversation[])) => void;
   setActiveConvId: (id: string) => void;
-  createNewChat: (options?: { temporary?: boolean; projectId?: string }) => string;
+  createNewChat: (options?: { temporary?: boolean; projectId?: string; personaId?: string }) => string;
   archiveChat: (id: string) => void;
   restoreChat: (id: string) => void;
   updateChatOptions: (id: string, patch: Partial<Pick<PlaygroundConversation, 'pinned' | 'projectId' | 'memoryEnabled' | 'memorySaveEnabled'>>) => void;
@@ -353,7 +353,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   createNewChat: (options) => {
     const state = get();
     const newId = `conv_${crypto.randomUUID()}`;
-    const initialPersona = PersonaResolver.resolve(state.activePersonaId, state.personas, state.defaultPersonaId);
+    const initialPersona = PersonaResolver.resolve(options?.personaId || state.defaultPersonaId, state.personas, state.defaultPersonaId);
     const initialMessages: ChatMessage[] = initialPersona?.greetingMessage
       ? [{ role: 'assistant', content: initialPersona.greetingMessage }]
       : [];
@@ -376,6 +376,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({
       conversations: nextConvs,
       activeConvId: newId,
+      activePersonaId: initialPersona?.id || state.defaultPersonaId,
       activeTab: 'playground',
     });
     void get().persistConversationToLoftyDb(newConv);
@@ -519,17 +520,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setActivePersonaId: (id) => {
     personaManager.setActivePersona(id);
     set({ activePersonaId: id });
-    try {
-      const saved = localStorage.getItem('zaylo_playground_conversations_v3');
-      if (saved) {
-        const convs = JSON.parse(saved);
-        if (Array.isArray(convs) && convs.length > 0) {
-          convs[0].personaId = id;
-          localStorage.setItem('zaylo_playground_conversations_v3', JSON.stringify(convs));
-        }
-      }
-    } catch {
-      // Ignored
+    const state = get();
+    const active = state.conversations.find(chat => chat.id === state.activeConvId);
+    if (active && active.personaId !== id) {
+      get().setConversations(previous => previous.map(chat => chat.id === active.id ? { ...chat, personaId: id, updatedAt: Date.now() } : chat));
     }
   },
 
