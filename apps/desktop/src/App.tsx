@@ -4,6 +4,8 @@ import { Header } from './components/layout/Header';
 import { useAppStore } from './stores/useAppStore';
 
 import { api } from './api/client';
+import { watchWorkspacePreferences } from './theme';
+import { useWorkspacePreferences } from './stores/useWorkspacePreferences';
 import { OverviewView } from './features/overview/OverviewView';
 import { ModelsView } from './features/models/ModelsView';
 import { ForgeView } from './features/forge/ForgeView';
@@ -41,6 +43,10 @@ export const App: React.FC = () => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     document.documentElement.classList.toggle('light', theme === 'light');
   }, [theme]);
+
+  // Appearance preferences: theme family, translucency, motion and text size.
+  // Attribute/variable-driven; no component re-render beyond this effect.
+  useEffect(() => watchWorkspacePreferences(useWorkspacePreferences), []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
