@@ -81,6 +81,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const builderMode = useWorkspacePreferences((state) => state.builderMode);
   const [voiceContainer, setVoiceContainer] = useState<HTMLDivElement | null>(null);
   const [voiceActive, setVoiceActive] = useState(false);
+  const focusAfterVoice = useRef(false);
+  useEffect(() => {
+    if (!voiceActive && focusAfterVoice.current) { focusAfterVoice.current = false; textareaRef.current?.focus(); }
+  }, [voiceActive]);
   const [input, setInput] = useState(() => chatDrafts.get(conversationId)?.text || '');
   useEffect(() => { chatDrafts.set(conversationId, { text: input, image: pendingImage }); }, [conversationId, input, pendingImage]);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
@@ -448,8 +452,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               {voiceControl || <VoiceInput container={voiceContainer} disabled={isGenerating}
                 onActiveChange={setVoiceActive}
                 onTranscript={(text, review) => {
-                  if (review || !isServerRunning) { setInput(text); textareaRef.current?.focus(); }
-                  else { setInput(''); onSendMessage(text); }
+                  const transcript = input.trim() ? `${input}${/\s$/.test(input) ? '' : ' '}${text}` : text;
+                  if (review || !isServerRunning) { focusAfterVoice.current = true; setInput(transcript); }
+                  else { setInput(''); onSendMessage(transcript); }
                 }} />}
               {isGenerating ? (
                 <button
