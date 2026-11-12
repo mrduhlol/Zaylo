@@ -1139,9 +1139,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
 }));
 
 // All UI request paths share this boundary, including Playground's direct inference calls.
-installConversationPrivacy(api, () => {
+installConversationPrivacy(api, (conversationId) => {
   const state = useAppStore.getState();
-  const chat = state.conversations.find(c => c.id === state.activeConvId);
+  const chat = state.conversations.find(c => c.id === (conversationId ?? state.activeConvId));
   return {
     conversations: state.conversations, activeConvId: state.activeConvId,
     blocked: [...state.deletedChats.map(c => c.id), ...loadLocal<string[]>('zaylo_deleted_ids', [])],
