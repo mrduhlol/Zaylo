@@ -324,10 +324,15 @@ function storeLocal(key: string, value: unknown) {
 }
 
 const initialConvsData = loadStoredConversations();
-if (!initialConvsData.activeConvId || (useWorkspacePreferences.getState().startupBehavior === 'new-chat' && !initialConvsData.conversations.some(chat => !chat.archivedAt && !chat.temporary && !chat.messages.some(message => message.role === 'user')))) {
+const startNewChat = useWorkspacePreferences.getState().startupBehavior === 'new-chat';
+const emptyStartupChat = startNewChat ? initialConvsData.conversations.find(chat =>
+  !chat.archivedAt && !chat.temporary && !chat.messages.some(message => message.role === 'user')) : undefined;
+if (emptyStartupChat) {
+  initialConvsData.activeConvId = emptyStartupChat.id;
+} else if (!initialConvsData.activeConvId || startNewChat) {
   const fresh = freshConversation(personaManager.getDefaultPersona());
   initialConvsData.conversations.unshift(fresh);
-  if (!initialConvsData.activeConvId) initialConvsData.activeConvId = fresh.id;
+  initialConvsData.activeConvId = fresh.id;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -381,8 +386,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
   deleteChat: (id) => {
     const chat = get().conversations.find(c => c.id === id);
     if (!chat) return;
-    const deletedChats = [...get().deletedChats.filter(c => c.id !== id), chat];
-    set({ deletedChats, undoAction: { label: 'Chat deleted', chat } });
+    if (chat.temporary) {
+      set(state => ({
+        deletedChats: state.deletedChats.filter(c => c.id !== id),
+        undoAction: state.undoAction?.chat.id === id ? undefined : state.undoAction,
+      }));
+    } else {
+      const deletedChats = [...get().deletedChats.filter(c => c.id !== id), chat];
+      set({ deletedChats, undoAction: { label: 'Chat deleted', chat } });
+    }
     get().setConversations(prev => prev.filter(c => c.id !== id));
     if (get().activeConvId === id) get().createNewChat();
   },

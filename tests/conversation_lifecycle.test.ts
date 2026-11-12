@@ -98,6 +98,10 @@ describe('conversation state and recovery', () => {
     useAppStore.getState().setConversations(prev => prev.map(item => item.id === id ? { ...item, messages: chat().messages } : item));
     await useAppStore.getState().persistConversationToLoftyDb(useAppStore.getState().conversations.find(item => item.id === id)!);
     useAppStore.getState().deleteChat(id);
+    expect(useAppStore.getState().deletedChats.some(chat => chat.id === id)).toBe(false);
+    expect(useAppStore.getState().undoAction?.chat.id).not.toBe(id);
+    useAppStore.getState().undoChatAction();
+    expect(useAppStore.getState().conversations.some(chat => chat.id === id)).toBe(false);
     expect(JSON.stringify([...storage.values()])).not.toContain('Secret title');
     expect((calls.mock.calls as any[]).some(([channel, payload]) => channel === 'memory:save-conversation' && payload?.id === id)).toBe(false);
     expect(calls.mock.calls.some(([channel]) => channel === 'memory:delete-conversation')).toBe(false);
@@ -123,9 +127,28 @@ describe('conversation state and recovery', () => {
     expect(store().conversations.some(item => item.id === id)).toBe(true);
     store().createNewChat();
     store().selectChat(id);
+    const { useWorkspacePreferences } = await import('../apps/desktop/src/stores/useWorkspacePreferences');
+    useWorkspacePreferences.getState().setStartupBehavior('continue');
     vi.resetModules();
     const reloaded = await import('../apps/desktop/src/stores/useAppStore');
     expect(reloaded.useAppStore.getState().activeConvId).toBe(id);
+  });
+
+  it.each([false, true])('opens an empty chat on startup instead of the previous active chat (existing empty: %s)', async (hasEmpty) => {
+    vi.resetModules();
+    const existing = chat({ id: 'previous' });
+    const empty = chat({ id: 'empty', messages: [{ role: 'assistant', content: 'Welcome' }] });
+    storage.set('zaylo_playground_conversations_v3', JSON.stringify(hasEmpty ? [existing, empty] : [existing]));
+    storage.set('zaylo_active_conversation', JSON.stringify(existing.id));
+    const { useAppStore } = await import('../apps/desktop/src/stores/useAppStore');
+    const state = useAppStore.getState();
+    expect(state.activeConvId).not.toBe(existing.id);
+    const active = state.conversations.find(item => item.id === state.activeConvId)!;
+    expect(active.messages.some(message => message.role === 'user')).toBe(false);
+    expect(active.temporary).not.toBe(true);
+    expect(active.archivedAt).toBeUndefined();
+    expect(state.conversations).toHaveLength(2);
+    if (hasEmpty) expect(state.activeConvId).toBe(empty.id);
   });
 
   it('keeps deletion during an in-flight sync hidden, and retains a tombstone after permanent deletion', async () => {
