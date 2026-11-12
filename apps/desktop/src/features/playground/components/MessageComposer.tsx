@@ -249,10 +249,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             onPaste={handlePaste}
             placeholder={
               !isServerRunning
-                ? 'Start your local model to chat…'
+                ? 'Write a draft while your local model starts…'
                 : 'Ask anything...'
             }
-            disabled={!isServerRunning}
             className="w-full bg-transparent pr-12 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none resize-none font-sans leading-relaxed select-text min-h-[38px] max-h-[180px]"
           />
 
