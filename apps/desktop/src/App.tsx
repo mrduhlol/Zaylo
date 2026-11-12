@@ -56,6 +56,13 @@ export const App: React.FC = () => {
     for (let index = 0; index < 9; index++) {
       actions[`chat${index + 1}`] = () => {
         const state = useAppStore.getState();
+        const visibleIds = state.isSidebarCollapsed ? [] : Array.from(document.querySelectorAll<HTMLElement>('[data-sidebar-chat-id]'))
+          .filter(element => element.getClientRects().length > 0)
+          .map(element => element.dataset.sidebarChatId!);
+        if (visibleIds.length) {
+          if (visibleIds[index]) state.selectChat(visibleIds[index]);
+          return;
+        }
         const ordered = [...state.conversations].sort((a, b) => {
           const left = a as typeof a & { pinned?: boolean; archived?: boolean };
           const right = b as typeof b & { pinned?: boolean; archived?: boolean };
