@@ -1,0 +1,795 @@
+/*
+ * Zaylo 4.0 theme family palettes.
+ *
+ * Five original families — T3 Chat, Grove, Ocean, Ember, Iris — inspired by
+ * the product planning direction (neutral near-black/near-white bases with a
+ * family hue) and informed by the standalone UX prototypes. No palette is a
+ * copy of an existing third-party theme; all values here are authored for
+ * Zaylo.
+ *
+ * Activation: the app root sets `data-theme-family="<family>"` alongside the
+ * existing `data-theme="dark|light"`. When no family attribute is present the
+ * legacy monochrome tokens from ../index.css apply unchanged.
+ *
+ * Every family defines BOTH appearances completely: no hardcoded dark
+ * surfaces in Light mode (sidebar stays light on light), full contrast for
+ * selected/hover/surface/border/accent states, and dedicated glow tokens used
+ * by effects.css. Chart/canvas content colors are intentionally untouched.
+ *
+ * New tokens consumed by token-driven surfaces:
+ *   --theme-accent         solid family accent (UI emphasis, glows)
+ *   --theme-accent-ink     readable text color on --theme-accent
+ *   --theme-accent-soft    tinted fill for selected states / soft chips
+ *   --theme-accent-hover   accent hover fill
+ *   --theme-glow           accent glow color (rgb triplet for rgba())
+ *   --theme-glow-strong    deeper glow triplet (used in Light mode)
+ */
+
+/* ============================================================
+   T3 Chat — soft violet on charcoal
+   ============================================================ */
+
+[data-theme='dark'][data-theme-family='t3-chat'],
+[data-theme='dark'][data-theme-family='t3-chat'] body,
+[data-theme='dark'][data-theme-family='t3-chat'] main {
+  background-color: #101013 !important;
+  color: #e9e5ee !important;
+}
+
+[data-theme='dark'][data-theme-family='t3-chat'] aside {
+  background-color: #141317 !important;
+  border-color: #2a2730 !important;
+  color: #e9e5ee !important;
+}
+
+[data-theme='dark'][data-theme-family='t3-chat'] header {
+  background-color: #101013 !important;
+  border-color: #2a2730 !important;
+  color: #e9e5ee !important;
+}
+
+[data-theme='dark'][data-theme-family='t3-chat'] {
+  --background: #101013;
+  --foreground: #e9e5ee;
+  --card: #1a1820;
+  --card-foreground: #e9e5ee;
+  --popover: #1a1820;
+  --popover-foreground: #e9e5ee;
+  --primary: #c4b4ec;
+  --primary-foreground: #1a1027;
+  --secondary: #211e28;
+  --secondary-foreground: #e9e5ee;
+  --muted: #1a1820;
+  --muted-foreground: #9b93a8;
+  --accent: #211e28;
+  --accent-foreground: #e9e5ee;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #2a2730;
+  --input: #1a1820;
+  --ring: #c4b4ec;
+
+  --app-bg: #101013;
+  --sidebar-bg: #141317;
+  --workspace-bg: #101013;
+  --header-bg: #101013;
+  --surface: #1a1820;
+  --surface-elevated: #211e28;
+  --hover-bg: #262230;
+  --selected-bg: rgba(196, 180, 236, 0.16);
+  --text-primary: #e9e5ee;
+  --text-secondary: #b4abc2;
+  --text-muted: #9b93a8;
+  --border-color: #2a2730;
+  --divider-color: #23202a;
+  --btn-primary-bg: #c4b4ec;
+  --btn-primary-text: #1a1027;
+  --accent-primary: #c4b4ec;
+  --accent-hover: #d5c8f2;
+  --status-success: #34d399;
+  --status-warning: #fbbf24;
+  --status-error: #f87171;
+  --status-info: #b4abc2;
+  --scrollbar-thumb: #2a2730;
+  --scrollbar-thumb-hover: #3a3544;
+  --modal-bg: #1a1820;
+  --dropdown-bg: #1a1820;
+
+  --theme-accent: #c4b4ec;
+  --theme-accent-ink: #1a1027;
+  --theme-accent-soft: rgba(196, 180, 236, 0.16);
+  --theme-accent-hover: #d5c8f2;
+  --theme-glow: 196 180 236;
+  --theme-glow-strong: 150 128 205;
+}
+
+[data-theme='light'][data-theme-family='t3-chat'],
+[data-theme='light'][data-theme-family='t3-chat'] body,
+[data-theme='light'][data-theme-family='t3-chat'] main {
+  background-color: #fbfafc !important;
+  color: #221a2e !important;
+}
+
+[data-theme='light'][data-theme-family='t3-chat'] aside {
+  background-color: #f4f1f7 !important;
+  border-color: #e4dce9 !important;
+  color: #221a2e !important;
+}
+
+[data-theme='light'][data-theme-family='t3-chat'] header {
+  background-color: #fbfafc !important;
+  border-color: #e4dce9 !important;
+  color: #221a2e !important;
+}
+
+[data-theme='light'][data-theme-family='t3-chat'] {
+  --background: #fbfafc;
+  --foreground: #221a2e;
+  --card: #ffffff;
+  --card-foreground: #221a2e;
+  --popover: #ffffff;
+  --popover-foreground: #221a2e;
+  --primary: #6d4fa3;
+  --primary-foreground: #ffffff;
+  --secondary: #f1edf5;
+  --secondary-foreground: #221a2e;
+  --muted: #f1edf5;
+  --muted-foreground: #6f6580;
+  --accent: #f1edf5;
+  --accent-foreground: #221a2e;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #e4dce9;
+  --input: #ffffff;
+  --ring: #6d4fa3;
+
+  --app-bg: #fbfafc;
+  --sidebar-bg: #f4f1f7;
+  --workspace-bg: #fbfafc;
+  --header-bg: #fbfafc;
+  --surface: #ffffff;
+  --surface-elevated: #f6f3f9;
+  --hover-bg: #ede8f2;
+  --selected-bg: rgba(109, 79, 163, 0.12);
+  --text-primary: #221a2e;
+  --text-secondary: #5d5470;
+  --text-muted: #6f6580;
+  --border-color: #e4dce9;
+  --divider-color: #ece6f0;
+  --btn-primary-bg: #6d4fa3;
+  --btn-primary-text: #ffffff;
+  --accent-primary: #6d4fa3;
+  --accent-hover: #5d4190;
+  --status-success: #059669;
+  --status-warning: #b45309;
+  --status-error: #dc2626;
+  --status-info: #6f6580;
+  --scrollbar-thumb: #ddd5e2;
+  --scrollbar-thumb-hover: #c9bfd2;
+  --modal-bg: #ffffff;
+  --dropdown-bg: #ffffff;
+
+  --theme-accent: #6d4fa3;
+  --theme-accent-ink: #ffffff;
+  --theme-accent-soft: rgba(109, 79, 163, 0.12);
+  --theme-accent-hover: #5d4190;
+  --theme-glow: 109 79 163;
+  --theme-glow-strong: 88 61 136;
+}
+
+/* ============================================================
+   Grove — moss green on deep forest charcoal
+   ============================================================ */
+
+[data-theme='dark'][data-theme-family='grove'],
+[data-theme='dark'][data-theme-family='grove'] body,
+[data-theme='dark'][data-theme-family='grove'] main {
+  background-color: #0f1210 !important;
+  color: #e6ebe6 !important;
+}
+
+[data-theme='dark'][data-theme-family='grove'] aside {
+  background-color: #131714 !important;
+  border-color: #262c27 !important;
+  color: #e6ebe6 !important;
+}
+
+[data-theme='dark'][data-theme-family='grove'] header {
+  background-color: #0f1210 !important;
+  border-color: #262c27 !important;
+  color: #e6ebe6 !important;
+}
+
+[data-theme='dark'][data-theme-family='grove'] {
+  --background: #0f1210;
+  --foreground: #e6ebe6;
+  --card: #171c18;
+  --card-foreground: #e6ebe6;
+  --popover: #171c18;
+  --popover-foreground: #e6ebe6;
+  --primary: #8fd0a5;
+  --primary-foreground: #0c1a10;
+  --secondary: #1d231e;
+  --secondary-foreground: #e6ebe6;
+  --muted: #171c18;
+  --muted-foreground: #94a096;
+  --accent: #1d231e;
+  --accent-foreground: #e6ebe6;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #262c27;
+  --input: #171c18;
+  --ring: #8fd0a5;
+
+  --app-bg: #0f1210;
+  --sidebar-bg: #131714;
+  --workspace-bg: #0f1210;
+  --header-bg: #0f1210;
+  --surface: #171c18;
+  --surface-elevated: #1d231e;
+  --hover-bg: #232a24;
+  --selected-bg: rgba(143, 208, 165, 0.15);
+  --text-primary: #e6ebe6;
+  --text-secondary: #b0bab2;
+  --text-muted: #94a096;
+  --border-color: #262c27;
+  --divider-color: #20261f;
+  --btn-primary-bg: #8fd0a5;
+  --btn-primary-text: #0c1a10;
+  --accent-primary: #8fd0a5;
+  --accent-hover: #a9dfbb;
+  --status-success: #34d399;
+  --status-warning: #fbbf24;
+  --status-error: #f87171;
+  --status-info: #b0bab2;
+  --scrollbar-thumb: #262c27;
+  --scrollbar-thumb-hover: #36403a;
+  --modal-bg: #171c18;
+  --dropdown-bg: #171c18;
+
+  --theme-accent: #8fd0a5;
+  --theme-accent-ink: #0c1a10;
+  --theme-accent-soft: rgba(143, 208, 165, 0.15);
+  --theme-accent-hover: #a9dfbb;
+  --theme-glow: 143 208 165;
+  --theme-glow-strong: 96 170 118;
+}
+
+[data-theme='light'][data-theme-family='grove'],
+[data-theme='light'][data-theme-family='grove'] body,
+[data-theme='light'][data-theme-family='grove'] main {
+  background-color: #fafbf9 !important;
+  color: #1a241d !important;
+}
+
+[data-theme='light'][data-theme-family='grove'] aside {
+  background-color: #f1f4f0 !important;
+  border-color: #dde4dc !important;
+  color: #1a241d !important;
+}
+
+[data-theme='light'][data-theme-family='grove'] header {
+  background-color: #fafbf9 !important;
+  border-color: #dde4dc !important;
+  color: #1a241d !important;
+}
+
+[data-theme='light'][data-theme-family='grove'] {
+  --background: #fafbf9;
+  --foreground: #1a241d;
+  --card: #ffffff;
+  --card-foreground: #1a241d;
+  --popover: #ffffff;
+  --popover-foreground: #1a241d;
+  --primary: #2e7d4f;
+  --primary-foreground: #ffffff;
+  --secondary: #eef2ed;
+  --secondary-foreground: #1a241d;
+  --muted: #eef2ed;
+  --muted-foreground: #5e6d61;
+  --accent: #eef2ed;
+  --accent-foreground: #1a241d;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #dde4dc;
+  --input: #ffffff;
+  --ring: #2e7d4f;
+
+  --app-bg: #fafbf9;
+  --sidebar-bg: #f1f4f0;
+  --workspace-bg: #fafbf9;
+  --header-bg: #fafbf9;
+  --surface: #ffffff;
+  --surface-elevated: #f3f6f2;
+  --hover-bg: #e6ece4;
+  --selected-bg: rgba(46, 125, 79, 0.12);
+  --text-primary: #1a241d;
+  --text-secondary: #4c5b50;
+  --text-muted: #5e6d61;
+  --border-color: #dde4dc;
+  --divider-color: #e6ebe4;
+  --btn-primary-bg: #2e7d4f;
+  --btn-primary-text: #ffffff;
+  --accent-primary: #2e7d4f;
+  --accent-hover: #276a43;
+  --status-success: #059669;
+  --status-warning: #b45309;
+  --status-error: #dc2626;
+  --status-info: #5e6d61;
+  --scrollbar-thumb: #d5ddd4;
+  --scrollbar-thumb-hover: #bfc9be;
+  --modal-bg: #ffffff;
+  --dropdown-bg: #ffffff;
+
+  --theme-accent: #2e7d4f;
+  --theme-accent-ink: #ffffff;
+  --theme-accent-soft: rgba(46, 125, 79, 0.12);
+  --theme-accent-hover: #276a43;
+  --theme-glow: 46 125 79;
+  --theme-glow-strong: 34 102 63;
+}
+
+/* ============================================================
+   Ocean — deep water blue on blue-slate charcoal
+   ============================================================ */
+
+[data-theme='dark'][data-theme-family='ocean'],
+[data-theme='dark'][data-theme-family='ocean'] body,
+[data-theme='dark'][data-theme-family='ocean'] main {
+  background-color: #0c1116 !important;
+  color: #e4eaef !important;
+}
+
+[data-theme='dark'][data-theme-family='ocean'] aside {
+  background-color: #101620 !important;
+  border-color: #242f3b !important;
+  color: #e4eaef !important;
+}
+
+[data-theme='dark'][data-theme-family='ocean'] header {
+  background-color: #0c1116 !important;
+  border-color: #242f3b !important;
+  color: #e4eaef !important;
+}
+
+[data-theme='dark'][data-theme-family='ocean'] {
+  --background: #0c1116;
+  --foreground: #e4eaef;
+  --card: #151c26;
+  --card-foreground: #e4eaef;
+  --popover: #151c26;
+  --popover-foreground: #e4eaef;
+  --primary: #8ec9ec;
+  --primary-foreground: #0a1622;
+  --secondary: #1b232e;
+  --secondary-foreground: #e4eaef;
+  --muted: #151c26;
+  --muted-foreground: #8d9aa8;
+  --accent: #1b232e;
+  --accent-foreground: #e4eaef;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #242f3b;
+  --input: #151c26;
+  --ring: #8ec9ec;
+
+  --app-bg: #0c1116;
+  --sidebar-bg: #101620;
+  --workspace-bg: #0c1116;
+  --header-bg: #0c1116;
+  --surface: #151c26;
+  --surface-elevated: #1b232e;
+  --hover-bg: #222c39;
+  --selected-bg: rgba(142, 201, 236, 0.15);
+  --text-primary: #e4eaef;
+  --text-secondary: #aeb9c5;
+  --text-muted: #8d9aa8;
+  --border-color: #242f3b;
+  --divider-color: #1e2833;
+  --btn-primary-bg: #8ec9ec;
+  --btn-primary-text: #0a1622;
+  --accent-primary: #8ec9ec;
+  --accent-hover: #aad9f2;
+  --status-success: #34d399;
+  --status-warning: #fbbf24;
+  --status-error: #f87171;
+  --status-info: #aeb9c5;
+  --scrollbar-thumb: #242f3b;
+  --scrollbar-thumb-hover: #344253;
+  --modal-bg: #151c26;
+  --dropdown-bg: #151c26;
+
+  --theme-accent: #8ec9ec;
+  --theme-accent-ink: #0a1622;
+  --theme-accent-soft: rgba(142, 201, 236, 0.15);
+  --theme-accent-hover: #aad9f2;
+  --theme-glow: 142 201 236;
+  --theme-glow-strong: 84 158 205;
+}
+
+[data-theme='light'][data-theme-family='ocean'],
+[data-theme='light'][data-theme-family='ocean'] body,
+[data-theme='light'][data-theme-family='ocean'] main {
+  background-color: #f9fbfc !important;
+  color: #16222c !important;
+}
+
+[data-theme='light'][data-theme-family='ocean'] aside {
+  background-color: #eff4f8 !important;
+  border-color: #d8e2ea !important;
+  color: #16222c !important;
+}
+
+[data-theme='light'][data-theme-family='ocean'] header {
+  background-color: #f9fbfc !important;
+  border-color: #d8e2ea !important;
+  color: #16222c !important;
+}
+
+[data-theme='light'][data-theme-family='ocean'] {
+  --background: #f9fbfc;
+  --foreground: #16222c;
+  --card: #ffffff;
+  --card-foreground: #16222c;
+  --popover: #ffffff;
+  --popover-foreground: #16222c;
+  --primary: #1f6fa8;
+  --primary-foreground: #ffffff;
+  --secondary: #ecf1f5;
+  --secondary-foreground: #16222c;
+  --muted: #ecf1f5;
+  --muted-foreground: #5a6b7a;
+  --accent: #ecf1f5;
+  --accent-foreground: #16222c;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #d8e2ea;
+  --input: #ffffff;
+  --ring: #1f6fa8;
+
+  --app-bg: #f9fbfc;
+  --sidebar-bg: #eff4f8;
+  --workspace-bg: #f9fbfc;
+  --header-bg: #f9fbfc;
+  --surface: #ffffff;
+  --surface-elevated: #f1f5f9;
+  --hover-bg: #e2eaef;
+  --selected-bg: rgba(31, 111, 168, 0.12);
+  --text-primary: #16222c;
+  --text-secondary: #44566b;
+  --text-muted: #5a6b7a;
+  --border-color: #d8e2ea;
+  --divider-color: #e3ebf1;
+  --btn-primary-bg: #1f6fa8;
+  --btn-primary-text: #ffffff;
+  --accent-primary: #1f6fa8;
+  --accent-hover: #1a5e8f;
+  --status-success: #059669;
+  --status-warning: #b45309;
+  --status-error: #dc2626;
+  --status-info: #5a6b7a;
+  --scrollbar-thumb: #cfdae3;
+  --scrollbar-thumb-hover: #b7c6d2;
+  --modal-bg: #ffffff;
+  --dropdown-bg: #ffffff;
+
+  --theme-accent: #1f6fa8;
+  --theme-accent-ink: #ffffff;
+  --theme-accent-soft: rgba(31, 111, 168, 0.12);
+  --theme-accent-hover: #1a5e8f;
+  --theme-glow: 31 111 168;
+  --theme-glow-strong: 22 90 138;
+}
+
+/* ============================================================
+   Ember — warm amber on umber charcoal
+   ============================================================ */
+
+[data-theme='dark'][data-theme-family='ember'],
+[data-theme='dark'][data-theme-family='ember'] body,
+[data-theme='dark'][data-theme-family='ember'] main {
+  background-color: #141110 !important;
+  color: #efe8e3 !important;
+}
+
+[data-theme='dark'][data-theme-family='ember'] aside {
+  background-color: #191513 !important;
+  border-color: #332a24 !important;
+  color: #efe8e3 !important;
+}
+
+[data-theme='dark'][data-theme-family='ember'] header {
+  background-color: #141110 !important;
+  border-color: #332a24 !important;
+  color: #efe8e3 !important;
+}
+
+[data-theme='dark'][data-theme-family='ember'] {
+  --background: #141110;
+  --foreground: #efe8e3;
+  --card: #1e1917;
+  --card-foreground: #efe8e3;
+  --popover: #1e1917;
+  --popover-foreground: #efe8e3;
+  --primary: #ecb489;
+  --primary-foreground: #241108;
+  --secondary: #251f1b;
+  --secondary-foreground: #efe8e3;
+  --muted: #1e1917;
+  --muted-foreground: #a89a90;
+  --accent: #251f1b;
+  --accent-foreground: #efe8e3;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #332a24;
+  --input: #1e1917;
+  --ring: #ecb489;
+
+  --app-bg: #141110;
+  --sidebar-bg: #191513;
+  --workspace-bg: #141110;
+  --header-bg: #141110;
+  --surface: #1e1917;
+  --surface-elevated: #251f1b;
+  --hover-bg: #2e2620;
+  --selected-bg: rgba(236, 180, 137, 0.15);
+  --text-primary: #efe8e3;
+  --text-secondary: #c2b4aa;
+  --text-muted: #a89a90;
+  --border-color: #332a24;
+  --divider-color: #29221d;
+  --btn-primary-bg: #ecb489;
+  --btn-primary-text: #241108;
+  --accent-primary: #ecb489;
+  --accent-hover: #f2c6a4;
+  --status-success: #34d399;
+  --status-warning: #fbbf24;
+  --status-error: #f87171;
+  --status-info: #c2b4aa;
+  --scrollbar-thumb: #332a24;
+  --scrollbar-thumb-hover: #453a32;
+  --modal-bg: #1e1917;
+  --dropdown-bg: #1e1917;
+
+  --theme-accent: #ecb489;
+  --theme-accent-ink: #241108;
+  --theme-accent-soft: rgba(236, 180, 137, 0.15);
+  --theme-accent-hover: #f2c6a4;
+  --theme-glow: 236 180 137;
+  --theme-glow-strong: 205 128 78;
+}
+
+[data-theme='light'][data-theme-family='ember'],
+[data-theme='light'][data-theme-family='ember'] body,
+[data-theme='light'][data-theme-family='ember'] main {
+  background-color: #fbf9f7 !important;
+  color: #2b201a !important;
+}
+
+[data-theme='light'][data-theme-family='ember'] aside {
+  background-color: #f5f0eb !important;
+  border-color: #e7dcd2 !important;
+  color: #2b201a !important;
+}
+
+[data-theme='light'][data-theme-family='ember'] header {
+  background-color: #fbf9f7 !important;
+  border-color: #e7dcd2 !important;
+  color: #2b201a !important;
+}
+
+[data-theme='light'][data-theme-family='ember'] {
+  --background: #fbf9f7;
+  --foreground: #2b201a;
+  --card: #ffffff;
+  --card-foreground: #2b201a;
+  --popover: #ffffff;
+  --popover-foreground: #2b201a;
+  --primary: #b35a1f;
+  --primary-foreground: #ffffff;
+  --secondary: #f2ece6;
+  --secondary-foreground: #2b201a;
+  --muted: #f2ece6;
+  --muted-foreground: #7a6a5e;
+  --accent: #f2ece6;
+  --accent-foreground: #2b201a;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #e7dcd2;
+  --input: #ffffff;
+  --ring: #b35a1f;
+
+  --app-bg: #fbf9f7;
+  --sidebar-bg: #f5f0eb;
+  --workspace-bg: #fbf9f7;
+  --header-bg: #fbf9f7;
+  --surface: #ffffff;
+  --surface-elevated: #f5f0eb;
+  --hover-bg: #ede4db;
+  --selected-bg: rgba(179, 90, 31, 0.12);
+  --text-primary: #2b201a;
+  --text-secondary: #655549;
+  --text-muted: #7a6a5e;
+  --border-color: #e7dcd2;
+  --divider-color: #eee5dc;
+  --btn-primary-bg: #b35a1f;
+  --btn-primary-text: #ffffff;
+  --accent-primary: #b35a1f;
+  --accent-hover: #9a4c19;
+  --status-success: #059669;
+  --status-warning: #b45309;
+  --status-error: #dc2626;
+  --status-info: #7a6a5e;
+  --scrollbar-thumb: #e2d7cc;
+  --scrollbar-thumb-hover: #cec0b2;
+  --modal-bg: #ffffff;
+  --dropdown-bg: #ffffff;
+
+  --theme-accent: #b35a1f;
+  --theme-accent-ink: #ffffff;
+  --theme-accent-soft: rgba(179, 90, 31, 0.12);
+  --theme-accent-hover: #9a4c19;
+  --theme-glow: 179 90 31;
+  --theme-glow-strong: 148 68 14;
+}
+
+/* ============================================================
+   Iris — orchid violet on plum charcoal (default family)
+   ============================================================ */
+
+[data-theme='dark'][data-theme-family='iris'],
+[data-theme='dark'][data-theme-family='iris'] body,
+[data-theme='dark'][data-theme-family='iris'] main {
+  background-color: #121014 !important;
+  color: #ece7f0 !important;
+}
+
+[data-theme='dark'][data-theme-family='iris'] aside {
+  background-color: #17141a !important;
+  border-color: #2d2836 !important;
+  color: #ece7f0 !important;
+}
+
+[data-theme='dark'][data-theme-family='iris'] header {
+  background-color: #121014 !important;
+  border-color: #2d2836 !important;
+  color: #ece7f0 !important;
+}
+
+[data-theme='dark'][data-theme-family='iris'] {
+  --background: #121014;
+  --foreground: #ece7f0;
+  --card: #1c1822;
+  --card-foreground: #ece7f0;
+  --popover: #1c1822;
+  --popover-foreground: #ece7f0;
+  --primary: #c9a8ef;
+  --primary-foreground: #1f0f33;
+  --secondary: #232030;
+  --secondary-foreground: #ece7f0;
+  --muted: #1c1822;
+  --muted-foreground: #9d92ab;
+  --accent: #232030;
+  --accent-foreground: #ece7f0;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #2d2836;
+  --input: #1c1822;
+  --ring: #c9a8ef;
+
+  --app-bg: #121014;
+  --sidebar-bg: #17141a;
+  --workspace-bg: #121014;
+  --header-bg: #121014;
+  --surface: #1c1822;
+  --surface-elevated: #232030;
+  --hover-bg: #2a2538;
+  --selected-bg: rgba(201, 168, 239, 0.16);
+  --text-primary: #ece7f0;
+  --text-secondary: #b8abc8;
+  --text-muted: #9d92ab;
+  --border-color: #2d2836;
+  --divider-color: #262132;
+  --btn-primary-bg: #c9a8ef;
+  --btn-primary-text: #1f0f33;
+  --accent-primary: #c9a8ef;
+  --accent-hover: #d9c0f4;
+  --status-success: #34d399;
+  --status-warning: #fbbf24;
+  --status-error: #f87171;
+  --status-info: #b8abc8;
+  --scrollbar-thumb: #2d2836;
+  --scrollbar-thumb-hover: #3e3750;
+  --modal-bg: #1c1822;
+  --dropdown-bg: #1c1822;
+
+  --theme-accent: #c9a8ef;
+  --theme-accent-ink: #1f0f33;
+  --theme-accent-soft: rgba(201, 168, 239, 0.16);
+  --theme-accent-hover: #d9c0f4;
+  --theme-glow: 201 168 239;
+  --theme-glow-strong: 156 116 212;
+}
+
+[data-theme='light'][data-theme-family='iris'],
+[data-theme='light'][data-theme-family='iris'] body,
+[data-theme='light'][data-theme-family='iris'] main {
+  background-color: #fcfafd !important;
+  color: #251c30 !important;
+}
+
+[data-theme='light'][data-theme-family='iris'] aside {
+  background-color: #f4f1f8 !important;
+  border-color: #e5dcee !important;
+  color: #251c30 !important;
+}
+
+[data-theme='light'][data-theme-family='iris'] header {
+  background-color: #fcfafd !important;
+  border-color: #e5dcee !important;
+  color: #251c30 !important;
+}
+
+[data-theme='light'][data-theme-family='iris'] {
+  --background: #fcfafd;
+  --foreground: #251c30;
+  --card: #ffffff;
+  --card-foreground: #251c30;
+  --popover: #ffffff;
+  --popover-foreground: #251c30;
+  --primary: #7a4fd0;
+  --primary-foreground: #ffffff;
+  --secondary: #f2eef6;
+  --secondary-foreground: #251c30;
+  --muted: #f2eef6;
+  --muted-foreground: #6f647d;
+  --accent: #f2eef6;
+  --accent-foreground: #251c30;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #e5dcee;
+  --input: #ffffff;
+  --ring: #7a4fd0;
+
+  --app-bg: #fcfafd;
+  --sidebar-bg: #f4f1f8;
+  --workspace-bg: #fcfafd;
+  --header-bg: #fcfafd;
+  --surface: #ffffff;
+  --surface-elevated: #f6f2fa;
+  --hover-bg: #ece5f3;
+  --selected-bg: rgba(122, 79, 208, 0.12);
+  --text-primary: #251c30;
+  --text-secondary: #5a4f6b;
+  --text-muted: #6f647d;
+  --border-color: #e5dcee;
+  --divider-color: #ede8f2;
+  --btn-primary-bg: #7a4fd0;
+  --btn-primary-text: #ffffff;
+  --accent-primary: #7a4fd0;
+  --accent-hover: #6841b8;
+  --status-success: #059669;
+  --status-warning: #b45309;
+  --status-error: #dc2626;
+  --status-info: #6f647d;
+  --scrollbar-thumb: #ddd4e6;
+  --scrollbar-thumb-hover: #c8bcd6;
+  --modal-bg: #ffffff;
+  --dropdown-bg: #ffffff;
+
+  --theme-accent: #7a4fd0;
+  --theme-accent-ink: #ffffff;
+  --theme-accent-soft: rgba(122, 79, 208, 0.12);
+  --theme-accent-hover: #6841b8;
+  --theme-glow: 122 79 208;
+  --theme-glow-strong: 97 61 175;
+}
+
+/* ============================================================
+   Shared: selected states pick up the family accent wherever a
+   token-driven surface marks selection.
+   ============================================================ */
+
+[data-theme-family] .zaylo-selected {
+  background-color: var(--selected-bg, var(--hover-bg));
+}
