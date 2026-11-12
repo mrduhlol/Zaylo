@@ -16,9 +16,13 @@ import {
   Palette,
   Brain,
 } from 'lucide-react';
+import { chatDrafts } from '../hooks/chatSession';
 import type { ServerState } from '@local-ai/shared';
 
 interface MessageComposerProps {
+  conversationId?: string;
+  /** Parent supplies local transcription UI; never invoke browser speech services here. */
+  voiceControl?: React.ReactNode;
   onSendMessage: (text: string) => void;
   onStopGeneration: () => void;
   isGenerating: boolean;
@@ -44,6 +48,8 @@ interface MessageComposerProps {
 }
 
 export const MessageComposer: React.FC<MessageComposerProps> = ({
+  conversationId = 'new',
+  voiceControl,
   onSendMessage,
   onStopGeneration,
   isGenerating,
@@ -67,7 +73,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   onOpenChartModal,
   onOpenPresentationModal,
 }) => {
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => chatDrafts.get(conversationId)?.text || '');
+  useEffect(() => { chatDrafts.set(conversationId, { text: input, image: pendingImage }); }, [conversationId, input, pendingImage]);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -99,10 +106,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (isGenerating) {
-      onStopGeneration();
-      return;
-    }
+    if (isGenerating) return;
     if ((!input.trim() && !pendingImage) || !isServerRunning) return;
     const msg = input;
     setInput('');
@@ -113,7 +117,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit();
     }
@@ -216,10 +220,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         )}
 
         {/* Floating Composer Container */}
-        <div className="relative rounded-2xl border border-[#eaeaea] dark:border-[#262626] focus-within:border-zinc-400 dark:focus-within:border-[#737373] bg-white dark:bg-[#141414] shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.3)] transition-all px-4 pt-3.5 pb-2.5">
+        <div className="zaylo-composer-glow relative rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] transition-colors px-4 pt-3.5 pb-2.5">
           {/* Textarea */}
           <textarea
             ref={textareaRef}
+            aria-label="Message"
             rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -231,14 +236,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 : 'Ask anything...'
             }
             disabled={!isServerRunning}
-            className="w-full bg-transparent pr-12 text-sm text-[#111111] dark:text-[#F5F5F5] placeholder-zinc-400 dark:placeholder-[#737373] focus:outline-none resize-none font-sans leading-relaxed select-text min-h-[38px] max-h-[180px]"
+            className="w-full bg-transparent pr-12 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none resize-none font-sans leading-relaxed select-text min-h-[38px] max-h-[180px]"
           />
 
           <input
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept="image/*,.pdf,.txt,.md,.json"
+            accept="image/*"
             className="hidden"
           />
 
@@ -419,15 +424,16 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             </div>
 
             {/* Right Control: Black/White Send / Stop Button */}
-            <div>
+            <div className="flex items-center gap-2">
+              {voiceControl}
               {isGenerating ? (
                 <button
                   type="button"
                   onClick={onStopGeneration}
-                  className="w-8 h-8 rounded-xl bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 flex items-center justify-center transition-transform active:scale-95 shadow-sm"
+                  className="h-8 px-3 gap-2 rounded-xl bg-[var(--foreground)] text-[var(--background)] flex items-center justify-center" aria-label="Stop generation"
                   title="Stop generating"
                 >
-                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <Square className="w-3.5 h-3.5 fill-current" /><span className="text-xs">Stop</span>
                 </button>
               ) : (
                 <button
