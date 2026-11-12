@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { RequestQueue } from '../packages/inference/src/queue';
 import { InferenceService } from '../packages/inference/src/service';
 
@@ -58,5 +59,28 @@ describe('inference cancellation', () => {
     const result = await service.chat(request);
     expect(result.choices[0].message?.content).toBe('ok');
     expect(service.getMetrics().activeRequests).toBe(0);
+  });
+});
+
+// Guard the renderer/native boundary without requiring a graphical Electron session.
+describe('desktop stream ownership', () => {
+  it('assigns IDs before invoke and filters concurrent streams in both consumers', () => {
+    const playground = readFileSync('apps/desktop/src/features/playground/PlaygroundView.tsx', 'utf8');
+    const preview = readFileSync('apps/desktop/src/features/personas/components/PersonaTestChat.tsx', 'utf8');
+    expect(playground).toContain('const clientRequestId = crypto.randomUUID()');
+    expect(playground).toContain('streamRequestIdRef.current = clientRequestId');
+    expect(playground).toContain('if (data.requestId !== clientRequestId) return');
+    expect(preview).toContain('id: crypto.randomUUID()');
+    expect(preview).toContain('if (current.id !== requestId) return');
+    expect(preview).toContain('clientRequestId: current.id');
+    expect(preview).not.toContain('if (!current.id) current.id = requestId');
+  });
+
+  it('preserves legacy IDs while correlating new requests and preventing active collisions', () => {
+    const handlers = readFileSync('apps/desktop/electron/ipc/handlers.ts', 'utf8');
+    expect(handlers).toContain('requestId: clientRequestId ?? chunk.id');
+    expect(handlers).toContain('pendingInference.has(clientRequestId)');
+    expect(handlers).toContain('pendingInference.delete(clientRequestId)');
+    expect(handlers).toContain('pendingInference.clear()');
   });
 });
