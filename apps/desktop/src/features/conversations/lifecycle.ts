@@ -45,7 +45,7 @@ export function installConversationPrivacy(
     if (channel === 'memory:sync-conversations') {
       payload = { ...payload, conversations: payload.conversations.filter((item: PlaygroundConversation) => canSaveMemory(state.conversations.find(local => local.id === item.id) ?? item) && !state.blocked.includes(item.id)) };
     }
-    if (channel === 'inference:chat') {
+    if (channel === 'inference:chat' && id) {
       const recall = Boolean(payload.memory && canRecallMemory(chat));
       payload = { ...payload, memory: recall && canSaveMemory(chat) };
       // The backend couples automatic recall and extraction. Recall explicitly when saving is off.
