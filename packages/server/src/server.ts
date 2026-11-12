@@ -129,13 +129,9 @@ export class ApiServer {
         }
       }
 
-      // Check if request is from the built-in Web Chat UI or loopback
-      const referer = (req.headers.referer as string) || '';
-      const host = (req.headers.host as string) || '';
-      const isFromWebChat = Boolean(referer && host && (referer.includes(host) || referer.includes(`:${this.config.port}`)));
-
-      // Requests strictly from loopback or internal web chat are always allowed without key
-      if (isLoopback || isFromWebChat) {
+      // Only local-only mode permits keyless loopback access. Browser-supplied
+      // headers (including Referer and Host) are never authentication evidence.
+      if (isLoopback && !this.config.lanEnabled) {
         isAuthed = true;
       }
 
