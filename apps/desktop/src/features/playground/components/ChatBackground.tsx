@@ -28,7 +28,7 @@ export function ChatBackground({ conversationId, active }: { conversationId: str
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!mounted || !canvas) return;
+    if (!mounted || !canvas || intensity <= 0) return;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -50,19 +50,33 @@ export function ChatBackground({ conversationId, active }: { conversationId: str
       }
       ctx.putImageData(frame, 0, 0);
     };
+    const hash = (x: number, y: number) => {
+      const value = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+      return value - Math.floor(value);
+    };
+    const noise = (x: number, y: number) => {
+      const ix = Math.floor(x), iy = Math.floor(y);
+      const fx = x - ix, fy = y - iy;
+      const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+      const top = hash(ix, iy) * (1 - u) + hash(ix + 1, iy) * u;
+      const bottom = hash(ix, iy + 1) * (1 - u) + hash(ix + 1, iy + 1) * u;
+      return top * (1 - v) + bottom * v;
+    };
     const draw = () => {
       if (disposed || document.hidden) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (variant === 9) {
-        // Continuous, original trigonometric density field; intentionally not the reference renderer.
+        // Original layered value-noise cloud density; no reference-site renderer code.
         ctx.fillStyle = getComputedStyle(canvas).getPropertyValue('--theme-accent').trim() || '#8270a8';
         ctx.font = '12px monospace';
         const ramp = ' .,:;i+=xX#';
         for (let y = 0; y < 30; y++) for (let x = 0; x < 80; x++) {
-          const wave = Math.sin(x * .09 + time * .2) + Math.cos(y * .21 - time * .15) + Math.sin((x + y) * .13 + time * .1);
+          const nx = x * .055 + time * .035, ny = y * .11;
+          const density = noise(nx, ny) * .6 + noise(nx * 2 + 7, ny * 2 + time * .02) * .27 + noise(nx * 4, ny * 4) * .13;
+          const shade = Math.max(0, Math.min(9, Math.floor((density - .28) * 23)));
           const envelope = Math.sin(Math.PI * x / 80) * Math.sin(Math.PI * y / 30);
-          ctx.globalAlpha = envelope * .65;
-          ctx.fillText(ramp[Math.max(0, Math.min(9, Math.floor((wave + 3) * 1.6)))], x * 8, y * 12);
+          ctx.globalAlpha = envelope * .65 * Math.min(1, shade / 3);
+          ctx.fillText(ramp[shade], x * 8, y * 12);
         }
         ctx.globalAlpha = 1;
       } else if (video && video.readyState >= 2) {
@@ -103,7 +117,7 @@ export function ChatBackground({ conversationId, active }: { conversationId: str
       if (video) { video.pause(); video.onloadeddata = null; video.removeAttribute('src'); video.load(); }
       if (image) image.onload = null;
     };
-  }, [variant, mounted, enabled, active]);
+  }, [variant, mounted, enabled, active, intensity]);
 
   if (!mounted) return null;
   return <div aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-center motion-safe:transition-opacity motion-safe:duration-300" style={{ opacity: active ? intensity * .6 : 0 }}>
