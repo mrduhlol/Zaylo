@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { useAppStore } from './stores/useAppStore';
@@ -6,6 +6,7 @@ import { useAppStore } from './stores/useAppStore';
 import { api } from './api/client';
 import { watchWorkspacePreferences } from './theme';
 import { useWorkspacePreferences } from './stores/useWorkspacePreferences';
+import { useWorkspaceShortcuts } from './features/settings/useWorkspaceShortcuts';
 import { OverviewView } from './features/overview/OverviewView';
 import { ModelsView } from './features/models/ModelsView';
 import { ForgeView } from './features/forge/ForgeView';
@@ -37,6 +38,44 @@ export const App: React.FC = () => {
     updateMetric,
     addLog,
   } = useAppStore();
+
+  const startupApplied = useRef(false);
+  const shortcutActions = useMemo(() => {
+    const actions: Record<string, () => void> = {
+      newChat: () => { useAppStore.getState().createNewChat(); },
+      searchChats: () => {
+        const state = useAppStore.getState();
+        if (state.isSidebarCollapsed) state.toggleSidebar();
+        requestAnimationFrame(() => window.dispatchEvent(new Event('zaylo:focus-chat-search')));
+      },
+      toggleSidebar: () => useAppStore.getState().toggleSidebar(),
+      settings: () => useAppStore.getState().setActiveTab('settings'),
+    };
+    for (let index = 0; index < 9; index++) {
+      actions[`chat${index + 1}`] = () => {
+        const state = useAppStore.getState();
+        const ordered = [...state.conversations].sort((a, b) => {
+          const left = a as typeof a & { pinned?: boolean; archived?: boolean };
+          const right = b as typeof b & { pinned?: boolean; archived?: boolean };
+          return Number(Boolean(right.pinned)) - Number(Boolean(left.pinned)) || b.updatedAt - a.updatedAt;
+        }).filter(chat => !(chat as typeof chat & { archived?: boolean }).archived);
+        if (ordered[index]) state.selectChat(ordered[index].id);
+      };
+    }
+    return actions;
+  }, []);
+  useWorkspaceShortcuts(shortcutActions);
+
+  useEffect(() => {
+    if (startupApplied.current) return;
+    startupApplied.current = true;
+    const state = useAppStore.getState();
+    if (useWorkspacePreferences.getState().startupBehavior === 'new-chat') {
+      const empty = state.conversations.find(chat => !chat.messages.some(message => message.role === 'user'));
+      if (empty) state.selectChat(empty.id);
+      else state.createNewChat();
+    }
+  }, []);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
