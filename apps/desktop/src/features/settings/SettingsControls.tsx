@@ -34,7 +34,7 @@ export function SettingsSelect({ label, value, options, onChange }: { label: str
 }
 
 export function SettingsToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
-  return <button type="button" role="switch" aria-label={label} aria-checked={checked} onClick={() => onChange(!checked)} className={`relative h-6 w-11 shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 ${checked ? 'bg-[var(--theme-accent)]' : 'bg-[var(--border)]'}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white ${checked ? 'left-6' : 'left-1'}`} /></button>;
+  return <button type="button" role="switch" aria-label={label} aria-checked={checked} onClick={() => onChange(!checked)} className={`relative h-6 w-11 shrink-0 rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)] ${checked ? 'bg-[var(--theme-accent)]' : 'bg-[var(--border)]'}`}><span className={`absolute top-1 h-4 w-4 rounded-full bg-white ${checked ? 'left-6' : 'left-1'}`} /></button>;
 }
 
 /** Theme cards and the sidebar header use the same bundled user artwork. */
