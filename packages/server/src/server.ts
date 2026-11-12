@@ -305,7 +305,11 @@ export class ApiServer {
         reply.raw.flushHeaders();
 
         const ac = new AbortController();
-        req.raw.on('close', () => ac.abort());
+        // IncomingMessage 'close' also fires after an ordinary POST body ends.
+        // Cancel only for an aborted upload or a disconnected response client.
+        const onDisconnect = () => { if (!reply.raw.writableEnded) ac.abort(); };
+        req.raw.once('aborted', onDisconnect);
+        reply.raw.once('close', onDisconnect);
 
         try {
           for await (const chunk of this.inferenceService.chatStream(body, clientIp, ac.signal)) {
@@ -314,10 +318,14 @@ export class ApiServer {
           reply.raw.write(formatSSE('[DONE]'));
           reply.raw.end();
         } catch (err: any) {
-          if (!ac.signal.aborted) {
+          if (!ac.signal.aborted && !reply.raw.destroyed) {
             reply.raw.write(`data: ${JSON.stringify({ error: { message: err.message } })}\n\n`);
             reply.raw.end();
           }
+        } finally {
+          req.raw.removeListener('aborted', onDisconnect);
+          reply.raw.removeListener('close', onDisconnect);
+          if (!reply.raw.writableEnded && !reply.raw.destroyed) reply.raw.end();
         }
         return reply;
       }
