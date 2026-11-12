@@ -27,34 +27,34 @@
    Translucent glass surfaces (opt-in)
    ============================================================ */
 
-[data-translucent='true'] aside,
-[data-translucent='true'] header,
-[data-translucent='true'] .zaylo-glass {
+/* Match palette specificity and override its opaque compatibility surfaces. */
+[data-theme-family][data-translucent='true'] aside,
+[data-theme-family][data-translucent='true'] header,
+[data-theme-family][data-translucent='true'] .zaylo-glass,
+[data-theme-family][data-translucent='true'] .zaylo-composer-glow {
   background-color: color-mix(
     in srgb,
-    var(--sidebar-bg) calc(var(--zaylo-opacity) * 100%),
+    var(--surface) calc(var(--zaylo-opacity) * 100%),
     transparent
-  );
+  ) !important;
   backdrop-filter: blur(18px) saturate(1.15);
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
 }
 
-[data-translucent='true'][data-theme='light'] aside,
-[data-translucent='true'][data-theme='light'] header,
-[data-translucent='true'][data-theme='light'] .zaylo-glass {
-  background-color: color-mix(
-    in srgb,
-    var(--sidebar-bg) calc(var(--zaylo-opacity) * 100%),
-    transparent
-  );
+[data-theme-family][data-translucent='true'] aside {
+  background-color: color-mix(in srgb, var(--sidebar-bg) calc(var(--zaylo-opacity) * 100%), transparent) !important;
+}
+[data-theme-family][data-translucent='true'] header {
+  background-color: color-mix(in srgb, var(--header-bg) calc(var(--zaylo-opacity) * 100%), transparent) !important;
 }
 
 /* Honest fallback: no backdrop-filter support -> fully opaque surfaces.
    Chat text readability is never traded for translucency. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  [data-translucent='true'] aside,
-  [data-translucent='true'] header,
-  [data-translucent='true'] .zaylo-glass {
+  [data-theme-family][data-translucent='true'] aside,
+  [data-theme-family][data-translucent='true'] header,
+  [data-theme-family][data-translucent='true'] .zaylo-glass,
+  [data-theme-family][data-translucent='true'] .zaylo-composer-glow {
     background-color: var(--sidebar-bg) !important;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
