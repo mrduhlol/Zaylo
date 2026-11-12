@@ -14,7 +14,7 @@ const examples: Record<string, string> = {
 const button = 'inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
 
 export function PersonasView() {
-  const { personas, activePersonaId, defaultPersonaId, setActivePersonaId, setDefaultPersonaId, savePersona, duplicatePersona, deletePersona, createNewChat } = useAppStore();
+  const { personas, activePersonaId, defaultPersonaId, setDefaultPersonaId, savePersona, duplicatePersona, deletePersona, createNewChat } = useAppStore();
   const builderMode = useWorkspacePreferences(s => s.builderMode);
   const [query, setQuery] = useState('');
   const [editor, setEditor] = useState<{ persona: Persona | null } | null>(null);
@@ -40,8 +40,7 @@ export function PersonasView() {
     finally { if (importInput.current) importInput.current.value = ''; }
   };
   const usePersona = (persona: Persona) => {
-    setActivePersonaId(persona.id);
-    createNewChat();
+    createNewChat({ personaId: persona.id });
   };
   return <div className="h-full overflow-auto px-6 py-8 sm:px-10" style={{ background: 'var(--background)', color: 'var(--foreground)' }}>
     <div className="mx-auto max-w-6xl space-y-7">
