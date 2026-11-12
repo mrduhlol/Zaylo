@@ -17,6 +17,7 @@ import type { UnifiedModelOption } from '../types';
 import type { ServerState, Persona } from '@local-ai/shared';
 import { PlaygroundPersonaSelector } from '../../personas/components/PlaygroundPersonaSelector';
 import { useAppStore } from '../../../stores/useAppStore';
+import { SystemStatusPopover } from '../../../components/layout/SystemStatusPopover';
 
 interface PlaygroundToolbarProps {
   models: UnifiedModelOption[];
@@ -163,6 +164,7 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
 
       {/* Right Controls: Compare, History, More */}
       <div className="flex items-center gap-1.5">
+        <SystemStatusPopover />
         {/* Compare Control */}
         <button
           onClick={onToggleCompare}
