@@ -5,6 +5,7 @@ import type {
   ChatMessage,
   EmbeddingRequest,
   EmbeddingResponse,
+  RagSearchResult,
 } from '@local-ai/shared';
 import { ModelNotLoadedError, ValidationError } from '@local-ai/shared';
 import { ChatCompletionRequestSchema } from '@local-ai/shared';
@@ -203,14 +204,17 @@ export class InferenceService {
         }
       }
 
+      let sources: RagSearchResult[] | undefined;
       if (request.rag && this.ragEngine && lastUserText) {
         const searchResults = await this.ragEngine.search(lastUserText, 4, request.ragDocumentIds);
         if (searchResults.length > 0) {
           effectiveRequest.messages = this.ragEngine.augmentMessages(effectiveRequest.messages, searchResults);
+          sources = searchResults.map(source => ({ ...source }));
         }
       }
 
       const stream = this.currentRuntime.chatStream(effectiveRequest, abortController.signal);
+      let sentSources = false;
 
       for await (const chunk of stream) {
         if (!firstTokenTime) {
@@ -226,6 +230,7 @@ export class InferenceService {
         // Ensure chunk contains ID
         chunk.id = requestId;
         chunk.model = this.currentModelName || request.model;
+        if (!sentSources && sources?.length) { chunk.sources = sources; sentSources = true; }
         yield chunk;
       }
 
@@ -282,9 +287,11 @@ export class InferenceService {
     const requestId = `chatcmpl-${crypto.randomBytes(12).toString('hex')}`;
     let accumulatedContent = '';
     let finishReason: 'stop' | 'length' = 'stop';
+    let sources: RagSearchResult[] | undefined;
     const startTime = Date.now();
 
     for await (const chunk of this.chatStream(request, clientIp, signal)) {
+      if (chunk.sources) sources = chunk.sources;
       const delta = chunk.choices[0]?.delta?.content;
       if (delta) accumulatedContent += delta;
       if (chunk.choices[0]?.finish_reason) {
@@ -296,13 +303,14 @@ export class InferenceService {
     const promptTokens = Math.max(1, Math.ceil(promptText.length / 4));
     const completionTokens = Math.max(1, Math.ceil(accumulatedContent.length / 4));
 
-    return createChatCompletionResponse({
+    const response = createChatCompletionResponse({
       id: requestId,
       model: this.currentModelName || request.model,
       created: Math.floor(startTime / 1000),
       message: {
         role: 'assistant',
         content: accumulatedContent,
+        ...(sources ? { sources } : {}),
       },
       finishReason,
       usage: {
@@ -311,6 +319,8 @@ export class InferenceService {
         total_tokens: promptTokens + completionTokens,
       },
     });
+    if (sources) response.sources = sources;
+    return response;
   }
 
   public async embeddings(request: EmbeddingRequest): Promise<EmbeddingResponse> {
