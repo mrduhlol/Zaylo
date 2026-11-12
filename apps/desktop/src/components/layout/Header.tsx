@@ -1,9 +1,13 @@
+import { useWorkspacePreferences } from '../../stores/useWorkspacePreferences';
+import { SystemStatusPopover } from './SystemStatusPopover';
 import React, { useState } from 'react';
 import { Play, Square, RefreshCw, Copy, Check, Sun, Moon } from 'lucide-react';
 import { useAppStore } from '../../stores/useAppStore';
 
 export const Header: React.FC = () => {
+  const builderMode = useWorkspacePreferences(state => state.builderMode);
   const {
+    isSidebarCollapsed,
     activeTab,
     selectedModel,
     theme,
@@ -55,7 +59,7 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className="h-16 border-b border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#090909] px-8 flex items-center justify-between select-none">
+    <header style={{ paddingLeft: isSidebarCollapsed ? 48 : undefined }} className="relative z-20 h-16 border-b border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#090909] px-8 flex items-center justify-between select-none">
       {/* Title & Active Model */}
       <div className="flex items-center gap-4">
         {activeTab === 'overview' ? (
@@ -104,13 +108,13 @@ export const Header: React.FC = () => {
         ) : (
           <>
             <h1 className="text-sm font-semibold capitalize tracking-wide text-[#111111] dark:text-[#F5F5F5]">{activeTab}</h1>
-            {activeTab === 'playground' && selectedModel ? (
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-zinc-50 dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] text-xs font-mono text-zinc-700 dark:text-[#A1A1AA]">
+            {builderMode && activeTab === 'playground' && selectedModel ? (
+              <div className="hidden xl:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-zinc-50 dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] text-xs font-mono text-zinc-700 dark:text-[#A1A1AA]">
                 <span className="text-zinc-400">Active:</span>
                 <span className="text-[#111111] dark:text-[#F5F5F5] font-medium">{selectedModel}</span>
               </div>
-            ) : serverInstance?.modelName ? (
-              <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-zinc-50 dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] text-xs font-mono text-zinc-700 dark:text-[#A1A1AA]">
+            ) : builderMode && serverInstance?.modelName ? (
+              <div className="hidden xl:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-zinc-50 dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] text-xs font-mono text-zinc-700 dark:text-[#A1A1AA]">
                 <span className="text-zinc-400">Loaded:</span>
                 <span className="text-[#111111] dark:text-[#F5F5F5] font-medium">{serverInstance.modelName}</span>
               </div>
@@ -121,8 +125,9 @@ export const Header: React.FC = () => {
 
       {/* Actions */}
       <div className="flex items-center gap-3">
+        <SystemStatusPopover />
         {/* Copy endpoint button */}
-        {serverState === 'RUNNING' && (
+        {builderMode && serverState === 'RUNNING' && (
           <button
             onClick={handleCopyEndpoint}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-[#141414] hover:bg-zinc-50 dark:hover:bg-[#202020] border border-[#eaeaea] dark:border-[#262626] text-xs font-mono text-zinc-700 dark:text-[#A1A1AA] transition-colors"
@@ -134,7 +139,7 @@ export const Header: React.FC = () => {
         )}
 
         {/* Server Start / Stop */}
-        <button
+        {builderMode && <button
           onClick={handleToggleServer}
           disabled={loadingAction || serverState === 'STARTING' || serverState === 'STOPPING'}
           className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
@@ -154,10 +159,10 @@ export const Header: React.FC = () => {
               <span>Start Server</span>
             </>
           )}
-        </button>
+        </button>}
 
         {/* Restart Button */}
-        {serverState === 'RUNNING' && (
+        {builderMode && serverState === 'RUNNING' && (
           <button
             onClick={handleRestart}
             disabled={loadingAction}
@@ -172,7 +177,7 @@ export const Header: React.FC = () => {
         <button
           onClick={toggleTheme}
           className="p-1.5 rounded-lg bg-white dark:bg-[#141414] hover:bg-zinc-50 dark:hover:bg-[#202020] border border-[#eaeaea] dark:border-[#262626] text-zinc-500 hover:text-zinc-800 dark:hover:text-[#F5F5F5] transition-colors flex items-center justify-center"
-          title={theme === 'dark' ? 'Switch to White Theme' : 'Switch to Dark Theme'}
+          title={theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
           aria-label="Toggle Theme"
         >
           {theme === 'dark' ? (
