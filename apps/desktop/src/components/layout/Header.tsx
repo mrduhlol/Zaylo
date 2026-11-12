@@ -1,3 +1,4 @@
+import { collapsedTitlebarInsets } from './titlebar';
 import { useWorkspacePreferences } from '../../stores/useWorkspacePreferences';
 import { SystemStatusPopover } from './SystemStatusPopover';
 import React, { useState } from 'react';
@@ -59,7 +60,7 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header style={{ paddingLeft: isSidebarCollapsed ? 48 : undefined }} className="relative z-20 h-16 border-b border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#090909] px-8 flex items-center justify-between select-none">
+    <header style={{ paddingLeft: isSidebarCollapsed ? collapsedTitlebarInsets().contentLeft : undefined }} className="zaylo-titlebar relative z-20 h-16 border-b border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#090909] px-8 flex items-center justify-between select-none">
       {/* Title & Active Model */}
       <div className="flex items-center gap-4">
         {activeTab === 'overview' ? (
