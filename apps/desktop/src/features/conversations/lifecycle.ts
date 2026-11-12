@@ -32,12 +32,12 @@ export function mergeHistory(local: PlaygroundConversation[], remote: Playground
 /** Guard the shared request boundary, including callers outside the store. */
 export function installConversationPrivacy(
   client: AppAPI,
-  context: () => { conversations: PlaygroundConversation[]; activeConvId: string; blocked: string[]; instructions?: string; documentIds?: string[] },
+  context: (conversationId?: string) => { conversations: PlaygroundConversation[]; activeConvId: string; blocked: string[]; instructions?: string; documentIds?: string[] },
 ) {
   const invoke = client.invoke.bind(client);
   client.invoke = (async (channel: string, payload: any) => {
-    const state = context();
     const id = payload?.conversationId ?? (channel === 'memory:save-conversation' ? payload?.id : undefined);
+    const state = context(id);
     const chat = state.conversations.find(item => item.id === (id ?? state.activeConvId));
     if (channel === 'memory:save-conversation' && (!canSaveMemory(chat) || state.blocked.includes(id))) return payload;
     if (channel === 'memory:save' && id && !canSaveMemory(chat)) throw new Error('Memory saving is disabled for this chat.');
