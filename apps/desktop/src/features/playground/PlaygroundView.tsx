@@ -51,7 +51,7 @@ const DEFAULT_SETTINGS: GenerationSettings = {
 const STORAGE_KEY = 'zaylo_playground_conversations_v3';
 const SETTINGS_KEY = 'zaylo_playground_settings_v3';
 
-export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string, index: number, text: string) => void; voiceControl?: React.ReactNode }> = ({ onBranchPrompt, voiceControl }) => {
+export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string, index: number, text: string) => void; voiceControl?: React.ReactNode; recordingContent?: React.ReactNode }> = ({ onBranchPrompt, voiceControl, recordingContent }) => {
   const {
     availableModels,
     installedModels,
@@ -855,6 +855,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
               key={activeConvId}
               conversationId={activeConvId}
               voiceControl={voiceControl}
+              recordingContent={recordingContent}
               onSendMessage={handleSendMessage}
               onStopGeneration={handleStopGeneration}
               isGenerating={isGenerating}
