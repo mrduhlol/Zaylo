@@ -21,7 +21,7 @@ import type {
 import { PlaygroundToolbar } from './components/PlaygroundToolbar';
 import { ConversationArea } from './components/ConversationArea';
 import { ChatBackground } from './components/ChatBackground';
-import { chatDrafts, mayRecallMemory, maySaveMemory, type ChatPrivacy } from './hooks/chatSession';
+import { chatDrafts, hasUserPrompt, mayRecallMemory, maySaveMemory, type ChatPrivacy } from './hooks/chatSession';
 import { MessageComposer } from './components/MessageComposer';
 import { PerformancePanel } from './components/PerformancePanel';
 import { SettingsDrawer } from './components/SettingsDrawer';
@@ -901,7 +901,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
     <div className="flex h-full w-full bg-[var(--background)] text-[var(--foreground)] overflow-hidden relative font-sans">
       {/* Main Workspace Column */}
       <div className="relative isolate flex-1 flex flex-col min-w-0 overflow-hidden bg-[var(--background)]">
-        <ChatBackground conversationId={activeConvId} active={!activeModel?.isImageModel && !isCompareMode && !activeConv?.messages.length} />
+        <ChatBackground conversationId={activeConvId} active={!activeModel?.isImageModel && !isCompareMode && !hasUserPrompt(activeConv?.messages)} />
         {/* Top Toolbar */}
         <PlaygroundToolbar
           models={unifiedModels}
@@ -1009,7 +1009,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
             />
 
             {/* Bottom Message Composer */}
-            {Boolean(activeConv?.messages.length) && composer}
+            {hasUserPrompt(activeConv?.messages) && composer}
           </>
         )}
       </div>
