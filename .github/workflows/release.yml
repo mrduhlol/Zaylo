@@ -9,7 +9,7 @@ on:
       tag:
         description: 'Release Tag'
         required: false
-        default: 'v3.2.0'
+        default: 'v4.0.0'
 
 permissions:
   contents: write
@@ -49,13 +49,16 @@ jobs:
           sudo apt-get install -y libarchive-tools libgbm-dev
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck workspace
+        run: pnpm typecheck
 
       - name: Build monorepo packages
         run: pnpm build
 
-      - name: Verify cross-platform LoftyDB, capabilities & theme tests
-        run: npx vitest run tests/loftydb_memory.test.ts tests/capabilities.test.ts tests/theme.test.ts tests/creations_and_visualizations.test.ts
+      - name: Run complete regression suite
+        run: pnpm test --maxWorkers=2 --no-file-parallelism
 
       - name: Package Desktop Installers
         run: pnpm --filter @local-ai/desktop dist --publish never
