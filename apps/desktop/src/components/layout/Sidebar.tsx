@@ -64,10 +64,9 @@ interface ChatMenuState {
   conv: SidebarConversation;
   x: number;
   y: number;
-  confirmingDelete: boolean;
 }
 
-const matchesProjectChat = (chat: PlaygroundConversation, query: string) => `${chat.title} ${JSON.stringify(chat.messages)}`.toLowerCase().includes(query.toLowerCase().trim());
+const matchesProjectChat = (chat: PlaygroundConversation, query: string) => `${chat.title} ${chat.messages.map(message => typeof message.content === 'string' ? message.content : message.content.filter(part => part.type === 'text').map(part => part.text).join(' ')).join(' ')}`.toLowerCase().includes(query.toLowerCase().trim());
 
 export const Sidebar: React.FC = () => {
   const {
@@ -116,12 +115,7 @@ export const Sidebar: React.FC = () => {
   const matchesSearch = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return () => true;
-    return (conv: SidebarConversation) => {
-      if ((conv.title || 'New Chat').toLowerCase().includes(q)) return true;
-      return conv.messages.some((m) =>
-        typeof m.content === 'string' ? m.content.toLowerCase().includes(q) : false
-      );
-    };
+    return (conv: SidebarConversation) => matchesProjectChat(conv, q);
   }, [searchQuery]);
 
   const pinnedChats = useMemo(
@@ -132,9 +126,9 @@ export const Sidebar: React.FC = () => {
   const recentChats = useMemo(
     () =>
       convs
-        .filter((c) => !c.pinned && !c.projectId && matchesSearch(c))
+        .filter((c) => !c.pinned && (!c.projectId || !projects.some(project => project.id === c.projectId)) && matchesSearch(c))
         .sort((a, b) => b.updatedAt - a.updatedAt),
-    [convs, matchesSearch]
+    [convs, matchesSearch, projects]
   );
 
   const pinnedExpanded = !collapsedSections['pinned'];
@@ -162,7 +156,7 @@ export const Sidebar: React.FC = () => {
 
   const openChatMenu = (conv: SidebarConversation, x: number, y: number) => {
     setMenuSection(null);
-    setChatMenu({ conv, x, y, confirmingDelete: false });
+    setChatMenu({ conv, x, y });
   };
 
   const togglePin = (conv: SidebarConversation) => {
@@ -222,6 +216,7 @@ export const Sidebar: React.FC = () => {
         >
           <input
             type="text"
+            aria-label="Chat title"
             autoFocus
             value={editingTitle}
             onChange={(e) => setEditingTitle(e.target.value)}
@@ -595,8 +590,9 @@ export const Sidebar: React.FC = () => {
             buttons[(index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
           }}
           style={{
-            left: Math.min(chatMenu.x, window.innerWidth - 264),
-            top: Math.min(chatMenu.y, window.innerHeight - 220),
+            left: Math.max(8, Math.min(chatMenu.x, window.innerWidth - 264)),
+            top: Math.max(8, Math.min(chatMenu.y, window.innerHeight * 0.3 - 8)),
+            maxWidth: 'calc(100vw - 16px)',
           }}
         >
           <button
@@ -656,14 +652,10 @@ export const Sidebar: React.FC = () => {
           <button
             role="menuitem"
             onClick={() => handleDelete(chatMenu.conv)}
-            className={`w-full px-3 py-1.5 text-left flex items-center gap-2.5 transition-colors ${
-              chatMenu.confirmingDelete
-                ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-medium'
-                : 'text-zinc-700 dark:text-[#A1A1AA] hover:bg-zinc-50 dark:hover:bg-[#202020] hover:text-rose-600'
-            }`}
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-[var(--foreground)] hover:bg-[var(--card)]"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            {chatMenu.confirmingDelete ? 'Confirm delete' : 'Delete'}
+            Delete
           </button>
         </div>
       )}
