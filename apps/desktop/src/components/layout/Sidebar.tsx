@@ -1,5 +1,6 @@
+import { exportChatPdf } from '../../api/exportChatPdf';
 import { themeArtwork } from '../../theme/artwork';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useLayoutEffect, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Play,
   Layers,
@@ -102,6 +103,7 @@ export const Sidebar: React.FC = () => {
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [chatMenu, setChatMenu] = useState<ChatMenuState | null>(null);
+  const [menuPosition, setMenuPosition] = useState({ left: 8, top: 8 });
   const menuRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -137,6 +139,18 @@ export const Sidebar: React.FC = () => {
   const recentExpanded = !collapsedSections['recent'];
   const moreToolsExpanded = !collapsedSections['more-tools'];
 
+  useLayoutEffect(() => {
+    if (!chatMenu || !menuRef.current) return;
+    const height = Math.min(menuRef.current.scrollHeight, window.innerHeight * .7);
+    setMenuPosition({ left: Math.max(8, Math.min(chatMenu.x, window.innerWidth - 264)), top: Math.max(8, Math.min(chatMenu.y, window.innerHeight - height - 8)) });
+  }, [chatMenu, menuSection]);
+  useEffect(() => {
+    if (!chatMenu || !menuRef.current) return;
+    const menu = menuRef.current;
+    const previous = document.activeElement as HTMLElement | null;
+    menu.querySelector<HTMLButtonElement>('button')?.focus();
+    return () => { if (menu.contains(document.activeElement) && previous?.isConnected) previous.focus(); };
+  }, [chatMenu]);
   // Close the chat menu on outside click or Escape.
   useEffect(() => {
     if (!chatMenu) return;
@@ -184,10 +198,10 @@ export const Sidebar: React.FC = () => {
     setChatMenu(null);
   };
 
-  const shareChat = async (conv: SidebarConversation) => {
+  const shareChat = async (conv: SidebarConversation, downloadOnly = false) => {
     const text = `# ${conv.title}\n\n${conv.messages.map(message => `## ${message.role}\n\n${typeof message.content === 'string' ? message.content : message.content.map(part => part.type === 'text' ? part.text : '[Image attachment]').join('\n')}`).join('\n\n')}`;
     try {
-      if (navigator.share) {
+      if (navigator.share && !downloadOnly) {
         try { await navigator.share({ title: conv.title, text }); setChatMenu(null); return; }
         catch (error) { if (error instanceof Error && error.name === 'AbortError') return; }
       }
@@ -599,8 +613,8 @@ export const Sidebar: React.FC = () => {
             buttons[(index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
           }}
           style={{
-            left: Math.max(8, Math.min(chatMenu.x, window.innerWidth - 264)),
-            top: Math.max(8, Math.min(chatMenu.y, window.innerHeight * 0.3 - 8)),
+            left: menuPosition.left,
+            top: menuPosition.top,
             maxWidth: 'calc(100vw - 16px)',
           }}
         >
@@ -629,6 +643,11 @@ export const Sidebar: React.FC = () => {
             <Share2 className="w-3.5 h-3.5" />
             Share
           </button>
+          <button role="menuitem" onClick={() => void shareChat(chatMenu.conv, true)} className="w-full px-3 py-1.5 text-left text-[var(--foreground)] hover:bg-[var(--card)]">Export Markdown</button>
+          <button role="menuitem" onClick={() => {
+            const conversation = chatMenu.conv; setChatMenu(null);
+            void exportChatPdf(conversation).then(result => { if (!result.canceled) setNotice('Chat exported as PDF.'); }).catch(error => setNotice(error instanceof Error ? error.message : 'Could not export this chat.'));
+          }} className="w-full px-3 py-1.5 text-left text-[var(--foreground)] hover:bg-[var(--card)]">Export PDF</button>
           <button
             role="menuitem"
             onClick={() => { archiveChat(chatMenu.conv.id); setChatMenu(null); }}
