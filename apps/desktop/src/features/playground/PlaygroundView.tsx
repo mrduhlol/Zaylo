@@ -635,8 +635,9 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
         stream: true,
         rag: ragEnabled,
         ragDocumentIds: selectedRagDocIds.length > 0 ? selectedRagDocIds : undefined,
-        // Current inference API couples recall and extraction: disable both when saving is forbidden.
-        memory: memoryEnabled && mayRecallMemory(privacy) && maySaveMemory(privacy) && Boolean(loftyDbStatus?.connected),
+        // Recall and saving follow independent per-chat privacy choices.
+        memory: memoryEnabled && mayRecallMemory(privacy) && Boolean(loftyDbStatus?.connected),
+        memorySave: maySaveMemory(privacy) && Boolean(loftyDbStatus?.connected),
         conversationId: activeConvId,
         personaId: resolvedPersona?.id,
       });
