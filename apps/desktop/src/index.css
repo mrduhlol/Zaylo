@@ -688,3 +688,11 @@ body {
 [data-theme="light"] ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* Keep a draggable titlebar when the sidebar is hidden; controls remain clickable. */
+.zaylo-titlebar {
+  -webkit-app-region: drag;
+}
+.zaylo-titlebar :is(button, input, textarea, select, a, [role="button"], [role="combobox"], [role="dialog"], [role="menu"]) {
+  -webkit-app-region: no-drag;
+}
