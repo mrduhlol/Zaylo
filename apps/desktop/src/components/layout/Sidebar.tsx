@@ -30,15 +30,11 @@ import {
 } from 'lucide-react';
 import { useAppStore, NavTab } from '../../stores/useAppStore';
 import { useWorkspacePreferences } from '../../stores/useWorkspacePreferences';
+import { useProjects } from '../../features/projects/useProjects';
 import { AtomIcon } from './sidebar/AtomIcon';
 import type { PlaygroundConversation } from '../../features/playground/types';
 
-/**
- * Conversations optionally carry a `pinned` flag persisted through the app
- * store's local conversation persistence (setConversations). It is declared
- * here until promoted to the shared conversation type.
- */
-type SidebarConversation = PlaygroundConversation & { pinned?: boolean };
+type SidebarConversation = PlaygroundConversation;
 
 interface NavItem {
   id: NavTab;
@@ -68,8 +64,9 @@ interface ChatMenuState {
   conv: SidebarConversation;
   x: number;
   y: number;
-  confirmingDelete: boolean;
 }
+
+const matchesProjectChat = (chat: PlaygroundConversation, query: string) => `${chat.title} ${chat.messages.map(message => typeof message.content === 'string' ? message.content : message.content.filter(part => part.type === 'text').map(part => part.text).join(' ')).join(' ')}`.toLowerCase().includes(query.toLowerCase().trim());
 
 export const Sidebar: React.FC = () => {
   const {
@@ -82,7 +79,11 @@ export const Sidebar: React.FC = () => {
     createNewChat,
     deleteChat,
     renameChat,
-    setConversations,
+    updateChatOptions,
+    archiveChat,
+    undoAction,
+    undoChatAction,
+    branchConversation,
     isSidebarCollapsed,
     toggleSidebar,
     installedModels,
@@ -90,6 +91,9 @@ export const Sidebar: React.FC = () => {
     loftyDbStatus,
   } = useAppStore();
 
+  const { projects, selectProject } = useProjects();
+  const [menuSection, setMenuSection] = useState<'project' | 'branch' | null>(null);
+  const [notice, setNotice] = useState('');
   const { builderMode, collapsedSections, toggleSection } = useWorkspacePreferences();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -105,17 +109,13 @@ export const Sidebar: React.FC = () => {
     return () => window.removeEventListener('zaylo:focus-chat-search', focusSearch);
   }, []);
 
-  const convs = conversations as SidebarConversation[];
+  const convs = conversations.filter(chat => !chat.archivedAt && !chat.temporary);
+  const matchingProjects = projects.filter(project => `${project.name} ${project.instructions}`.toLowerCase().includes(searchQuery.toLowerCase().trim()) || convs.some(chat => chat.projectId === project.id && matchesProjectChat(chat, searchQuery)));
 
   const matchesSearch = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return () => true;
-    return (conv: SidebarConversation) => {
-      if ((conv.title || 'New Chat').toLowerCase().includes(q)) return true;
-      return conv.messages.some((m) =>
-        typeof m.content === 'string' ? m.content.toLowerCase().includes(q) : false
-      );
-    };
+    return (conv: SidebarConversation) => matchesProjectChat(conv, q);
   }, [searchQuery]);
 
   const pinnedChats = useMemo(
@@ -126,9 +126,9 @@ export const Sidebar: React.FC = () => {
   const recentChats = useMemo(
     () =>
       convs
-        .filter((c) => !c.pinned && matchesSearch(c))
+        .filter((c) => !c.pinned && (!c.projectId || !projects.some(project => project.id === c.projectId)) && matchesSearch(c))
         .sort((a, b) => b.updatedAt - a.updatedAt),
-    [convs, matchesSearch]
+    [convs, matchesSearch, projects]
   );
 
   const pinnedExpanded = !collapsedSections['pinned'];
@@ -155,15 +155,12 @@ export const Sidebar: React.FC = () => {
   }, [chatMenu]);
 
   const openChatMenu = (conv: SidebarConversation, x: number, y: number) => {
-    setChatMenu({ conv, x, y, confirmingDelete: false });
+    setMenuSection(null);
+    setChatMenu({ conv, x, y });
   };
 
   const togglePin = (conv: SidebarConversation) => {
-    setConversations((prev) =>
-      (prev as SidebarConversation[]).map((c) =>
-        c.id === conv.id ? { ...c, pinned: !c.pinned } : c
-      )
-    );
+    updateChatOptions(conv.id, { pinned: !conv.pinned });
     setChatMenu(null);
   };
 
@@ -181,12 +178,23 @@ export const Sidebar: React.FC = () => {
   };
 
   const handleDelete = (conv: SidebarConversation) => {
-    if (chatMenu?.confirmingDelete) {
-      deleteChat(conv.id);
-      setChatMenu(null);
-    } else if (chatMenu) {
-      setChatMenu({ ...chatMenu, confirmingDelete: true });
-    }
+    deleteChat(conv.id);
+    setChatMenu(null);
+  };
+
+  const shareChat = async (conv: SidebarConversation) => {
+    const text = `# ${conv.title}\n\n${conv.messages.map(message => `## ${message.role}\n\n${typeof message.content === 'string' ? message.content : message.content.map(part => part.type === 'text' ? part.text : '[Image attachment]').join('\n')}`).join('\n\n')}`;
+    try {
+      if (navigator.share) {
+        try { await navigator.share({ title: conv.title, text }); setChatMenu(null); return; }
+        catch (error) { if (error instanceof Error && error.name === 'AbortError') return; }
+      }
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = `${conv.title.replace(/[^a-z0-9 -]/gi, '_') || 'chat'}.md`; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setNotice('Chat exported as Markdown.');
+    } catch { setNotice('Could not export this chat. Please try again.'); }
+    setChatMenu(null);
   };
 
   const navButtonClass = (isActive: boolean) =>
@@ -208,6 +216,7 @@ export const Sidebar: React.FC = () => {
         >
           <input
             type="text"
+            aria-label="Chat title"
             autoFocus
             value={editingTitle}
             onChange={(e) => setEditingTitle(e.target.value)}
@@ -313,7 +322,7 @@ export const Sidebar: React.FC = () => {
   );
 
   const chatList = (
-    <div className="flex-1 flex flex-col min-h-0 px-3">
+    <div className="flex-1 flex flex-col min-h-0 overflow-y-auto px-3">
       {/* New chat */}
       <button
         onClick={() => createNewChat()}
@@ -324,6 +333,8 @@ export const Sidebar: React.FC = () => {
         <span>New chat</span>
       </button>
 
+      <button onClick={() => createNewChat({ temporary: true })} className="text-left px-3 py-2 mb-2 text-xs text-[var(--muted-foreground)] zaylo-glow-hover rounded-lg">Temporary chat</button>
+      {conversations.find(chat => chat.id === activeConvId)?.temporary && <p className="px-3 pb-3 text-xs text-[var(--muted-foreground)]">Temporary chat: history and memory are off. Content lasts until the app closes.</p>}
       {/* Search chats */}
       <div className="relative mb-2 px-0">
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-[#737373] pointer-events-none" />
@@ -357,7 +368,20 @@ export const Sidebar: React.FC = () => {
         </div>
       )}
 
-      {searchQuery && pinnedChats.length === 0 && recentChats.length === 0 && (
+      <button onClick={() => setActiveTab('library')} className={navButtonClass(activeTab === 'library')}><span>Library</span></button>
+      {renderSectionHeader('projects', 'Projects', matchingProjects.length, !collapsedSections['projects'])}
+      {!collapsedSections['projects'] && <div className="space-y-1 mb-3">
+        <button onClick={() => { selectProject(undefined); setActiveTab('projects'); }} className="text-xs px-3 py-2 text-[var(--muted-foreground)]">Manage projects</button>
+        {matchingProjects.map(project => {
+          const chats = convs.filter(chat => chat.projectId === project.id && !chat.pinned && matchesSearch(chat));
+          const expanded = !collapsedSections[project.id];
+          return <div key={project.id}>
+            {renderSectionHeader(project.id, project.name, convs.filter(chat => chat.projectId === project.id).length, expanded)}
+            {expanded && <div className="pl-2 space-y-1"><button onClick={() => { selectProject(project.id); setActiveTab('projects'); }} className="text-xs px-3 py-2 underline text-[var(--muted-foreground)]">Files and instructions</button>{chats.map(renderChatRow)}</div>}
+          </div>;
+        })}
+      </div>}
+      {searchQuery && matchingProjects.length === 0 && pinnedChats.length === 0 && recentChats.length === 0 && (
         <div className="px-2 py-4 text-[11px] text-zinc-400 dark:text-[#737373]">
           No chats match “{searchQuery}”.
         </div>
@@ -384,12 +408,12 @@ export const Sidebar: React.FC = () => {
   return (
     <aside
       className={`bg-white dark:bg-[#0D0D0D] border-r border-[#eaeaea] dark:border-[#262626] flex flex-col select-none shrink-0 h-screen transition-all duration-200 overflow-hidden ${
-        isSidebarCollapsed ? 'w-12' : 'w-[280px]'
+        isSidebarCollapsed ? 'w-0 border-0' : 'w-[280px]'
       }`}
     >
       {isSidebarCollapsed ? (
         /* Collapsed: no rail, no logo — just the reopen toggle; space is reclaimed. */
-        <div className="flex flex-col items-center h-full">
+        <div className="fixed top-7 left-2 z-40">
           <div className="h-7 shrink-0 w-full [-webkit-app-region:drag]" />
           <button
             onClick={toggleSidebar}
@@ -550,15 +574,25 @@ export const Sidebar: React.FC = () => {
         </>
       )}
 
+      {undoAction && <div role="status" className="fixed bottom-5 left-4 z-50 flex gap-4 items-center rounded-lg p-3 shadow-lg bg-[var(--card)] text-[var(--foreground)] text-sm"><span>{undoAction.label}</span><button onClick={undoChatAction} className="underline font-semibold">Undo</button><button aria-label="Dismiss undo" onClick={() => useAppStore.setState({ undoAction: undefined })}><X className="w-4 h-4" /></button></div>}
+      {notice && <div role="status" className="fixed bottom-20 left-4 z-50 rounded-lg p-3 bg-[var(--card)] text-[var(--foreground)] text-sm">{notice}<button aria-label="Dismiss message" className="ml-3 underline" onClick={() => setNotice('')}>Dismiss</button></div>}
       {/* Chat context menu (right-click or dots) */}
       {chatMenu && (
         <div
           ref={menuRef}
           role="menu"
-          className="fixed z-50 w-48 rounded-xl bg-white dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] shadow-xl py-1.5 text-xs"
+          className="fixed z-50 w-64 max-h-[70vh] overflow-auto rounded-xl bg-[var(--background)] text-[var(--foreground)] border border-current/20 shadow-xl py-1.5 text-xs"
+          onKeyDown={event => {
+            if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+            event.preventDefault();
+            const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+            const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            buttons[(index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+          }}
           style={{
-            left: Math.min(chatMenu.x, window.innerWidth - 200),
-            top: Math.min(chatMenu.y, window.innerHeight - 220),
+            left: Math.max(8, Math.min(chatMenu.x, window.innerWidth - 264)),
+            top: Math.max(8, Math.min(chatMenu.y, window.innerHeight * 0.3 - 8)),
+            maxWidth: 'calc(100vw - 16px)',
           }}
         >
           <button
@@ -580,43 +614,48 @@ export const Sidebar: React.FC = () => {
           <div className="border-t border-zinc-100 dark:border-[#222222] my-1" />
           <button
             role="menuitem"
-            disabled
-            title="Sharing is not available yet"
-            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-zinc-400 dark:text-[#52525b] cursor-not-allowed"
+            onClick={() => void shareChat(chatMenu.conv)}
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-[var(--foreground)] hover:bg-[var(--card)]"
           >
             <Share2 className="w-3.5 h-3.5" />
             Share
           </button>
           <button
             role="menuitem"
-            disabled
-            title="Archive with restore is not available yet"
-            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-zinc-400 dark:text-[#52525b] cursor-not-allowed"
+            onClick={() => { archiveChat(chatMenu.conv.id); setChatMenu(null); }}
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-[var(--foreground)] hover:bg-[var(--card)]"
           >
             <Archive className="w-3.5 h-3.5" />
             Archive
           </button>
           <button
             role="menuitem"
-            disabled
-            title="Projects are not available yet"
-            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-zinc-400 dark:text-[#52525b] cursor-not-allowed"
+            onClick={() => setMenuSection(menuSection === 'project' ? null : 'project')}
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-[var(--foreground)] hover:bg-[var(--card)]"
           >
             <FolderInput className="w-3.5 h-3.5" />
             Move to project
           </button>
+          {menuSection === 'project' && <div className="px-3 py-2 space-y-2 border-y border-current/10">
+            <button role="menuitem" className="block underline" onClick={() => { updateChatOptions(chatMenu.conv.id, { projectId: undefined }); setChatMenu(null); }}>No project</button>
+            {projects.map(project => <button key={project.id} role="menuitem" className="block text-left underline break-all" onClick={() => { updateChatOptions(chatMenu.conv.id, { projectId: project.id }); setChatMenu(null); }}>{project.name}</button>)}
+            {!projects.length && <button onClick={() => { setActiveTab('projects'); setChatMenu(null); }}>Create a project first</button>}
+          </div>}
+          <div className="px-3 py-2 space-y-2 border-y border-current/10">
+            <label className="flex gap-2"><input type="checkbox" checked={conversations.find(c => c.id === chatMenu.conv.id)?.memoryEnabled !== false} onChange={event => updateChatOptions(chatMenu.conv.id, { memoryEnabled: event.target.checked })} />Recall memory in this chat</label>
+            <label className="flex gap-2"><input type="checkbox" checked={conversations.find(c => c.id === chatMenu.conv.id)?.memorySaveEnabled !== false} onChange={event => updateChatOptions(chatMenu.conv.id, { memorySaveEnabled: event.target.checked })} />Save this chat to memory</label>
+            <p className="text-[var(--muted-foreground)]">Changes apply to future requests. Existing memories remain in LoftyDB.</p>
+          </div>
+          {chatMenu.conv.messages.length > 0 && <button role="menuitem" className="w-full px-3 py-2 text-left" onClick={() => setMenuSection(menuSection === 'branch' ? null : 'branch')}>Branch from message…</button>}
+          {menuSection === 'branch' && <div className="px-3 space-y-2">{chatMenu.conv.messages.map((message, index) => <button key={index} role="menuitem" className="block w-full text-left truncate py-1 underline" onClick={() => { branchConversation(chatMenu.conv.id, index); setChatMenu(null); }}>{index + 1}. {message.role}: {typeof message.content === 'string' ? message.content.slice(0, 70) : 'Message with attachments'}</button>)}</div>}
           <div className="border-t border-zinc-100 dark:border-[#222222] my-1" />
           <button
             role="menuitem"
             onClick={() => handleDelete(chatMenu.conv)}
-            className={`w-full px-3 py-1.5 text-left flex items-center gap-2.5 transition-colors ${
-              chatMenu.confirmingDelete
-                ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-medium'
-                : 'text-zinc-700 dark:text-[#A1A1AA] hover:bg-zinc-50 dark:hover:bg-[#202020] hover:text-rose-600'
-            }`}
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-[var(--foreground)] hover:bg-[var(--card)]"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            {chatMenu.confirmingDelete ? 'Confirm delete' : 'Delete'}
+            Delete
           </button>
         </div>
       )}
