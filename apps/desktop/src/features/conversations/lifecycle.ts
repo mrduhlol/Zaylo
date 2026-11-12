@@ -41,7 +41,10 @@ export function installConversationPrivacy(
     const chat = state.conversations.find(item => item.id === (id ?? state.activeConvId));
     if (channel === 'memory:save-conversation' && (!canSaveMemory(chat) || state.blocked.includes(id))) return payload;
     if (channel === 'memory:save' && id && !canSaveMemory(chat)) throw new Error('Memory saving is disabled for this chat.');
-    if (channel === 'memory:recall' && !canRecallMemory(chat)) return [];
+    if (channel === 'memory:recall' && id && !canRecallMemory(chat)) return [];
+    if (channel === 'memory:sync-conversations') {
+      payload = { ...payload, conversations: payload.conversations.filter((item: PlaygroundConversation) => canSaveMemory(state.conversations.find(local => local.id === item.id) ?? item) && !state.blocked.includes(item.id)) };
+    }
     if (channel === 'inference:chat') {
       const recall = Boolean(payload.memory && canRecallMemory(chat));
       payload = { ...payload, memory: recall && canSaveMemory(chat) };
@@ -66,9 +69,10 @@ export function installConversationPrivacy(
     }
     const result = await (invoke as (channel: string, payload: any) => Promise<any>)(channel, payload);
     if (channel === 'memory:list-conversations' || channel === 'memory:search-conversations') {
+      const current = context();
       return (result || []).filter((item: PlaygroundConversation) => {
-        const known = state.conversations.find(local => local.id === item.id);
-        return !state.blocked.includes(item.id) && !(known ?? item).archivedAt && !(known ?? item).temporary;
+        const known = current.conversations.find(local => local.id === item.id);
+        return !current.blocked.includes(item.id) && !(known ?? item).archivedAt && !(known ?? item).temporary;
       });
     }
     return result;
