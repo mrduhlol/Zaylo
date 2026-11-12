@@ -51,7 +51,7 @@ const DEFAULT_SETTINGS: GenerationSettings = {
 const STORAGE_KEY = 'zaylo_playground_conversations_v3';
 const SETTINGS_KEY = 'zaylo_playground_settings_v3';
 
-export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string, index: number, text: string) => void }> = ({ onBranchPrompt }) => {
+export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string, index: number, text: string) => void; voiceControl?: React.ReactNode }> = ({ onBranchPrompt, voiceControl }) => {
   const {
     availableModels,
     installedModels,
@@ -102,7 +102,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
   const [, refreshAttachments] = useState(0);
   const stopRequestedRef = useRef(false);
   const streamRequestIdRef = useRef<string | null>(null);
-  const [externalInput, setExternalInput] = useState<string>('');
+  const [externalInput, setExternalInput] = useState<{ conversationId: string; text: string }>();
 
   // Fine-Tuned Models from Forge
   const [forgeArtifacts, setForgeArtifacts] = useState<FineTunedModelArtifact[]>([]);
@@ -309,7 +309,10 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
   };
   const activeModel = unifiedModels.find((m) => m.id === selectedModelId) || unifiedModels[0];
 
-  useEffect(() => { setExternalInput(''); }, [activeConvId]);
+  useEffect(() => {
+    const ids = new Set(conversations.map(c => c.id));
+    for (const id of chatDrafts.keys()) if (!ids.has(id)) chatDrafts.delete(id);
+  }, [conversations]);
 
   // Resolve persona for active conversation
   const activeConvPersona = useMemo(() => {
@@ -851,6 +854,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
             <MessageComposer
               key={activeConvId}
               conversationId={activeConvId}
+              voiceControl={voiceControl}
               onSendMessage={handleSendMessage}
               onStopGeneration={handleStopGeneration}
               isGenerating={isGenerating}
@@ -869,8 +873,8 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
               onOpenMemorySection={() => setActiveTab('loftydb')}
               onStartServer={handleStartServer}
               isStartingServer={isStartingServer}
-              externalInput={externalInput}
-              onClearExternalInput={() => setExternalInput('')}
+              externalInput={externalInput?.conversationId === activeConvId ? externalInput.text : ''}
+              onClearExternalInput={() => setExternalInput(undefined)}
               onOpenChartModal={() => setIsChartModalOpen(true)}
               onOpenPresentationModal={() => setIsPresentationModalOpen(true)}
             />
@@ -970,12 +974,12 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
           <>
             <ConversationArea
               composer={composer}
-              onEditPrompt={(index, text) => onBranchPrompt ? onBranchPrompt(activeConvId, index, text) : setExternalInput(text)}
+              onEditPrompt={(index, text) => onBranchPrompt ? onBranchPrompt(activeConvId, index, text) : setExternalInput({ conversationId: activeConvId, text })}
               messages={activeConv?.messages || []}
               isGenerating={isGenerating}
               selectedModel={activeModel}
               generationStats={activeConv?.lastStats}
-              onSelectSuggestion={(prompt) => setExternalInput(prompt)}
+              onSelectSuggestion={(prompt) => setExternalInput({ conversationId: activeConvId, text: prompt })}
               onRegenerate={handleRegenerate}
               onRetry={handleRegenerate}
               onClearConversation={handleClearConversation}
