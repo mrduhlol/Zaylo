@@ -32,7 +32,7 @@ export function mergeHistory(local: PlaygroundConversation[], remote: Playground
 /** Guard the shared request boundary, including callers outside the store. */
 export function installConversationPrivacy(
   client: AppAPI,
-  context: () => { conversations: PlaygroundConversation[]; activeConvId: string; blocked: string[]; instructions?: string },
+  context: () => { conversations: PlaygroundConversation[]; activeConvId: string; blocked: string[]; instructions?: string; documentIds?: string[] },
 ) {
   const invoke = client.invoke.bind(client);
   client.invoke = (async (channel: string, payload: any) => {
@@ -43,7 +43,23 @@ export function installConversationPrivacy(
     if (channel === 'memory:save' && id && !canSaveMemory(chat)) throw new Error('Memory saving is disabled for this chat.');
     if (channel === 'memory:recall' && !canRecallMemory(chat)) return [];
     if (channel === 'inference:chat') {
-      payload = { ...payload, memory: Boolean(payload.memory && canRecallMemory(chat)) };
+      const recall = Boolean(payload.memory && canRecallMemory(chat));
+      payload = { ...payload, memory: recall && canSaveMemory(chat) };
+      // The backend couples automatic recall and extraction. Recall explicitly when saving is off.
+      if (recall && !canSaveMemory(chat)) {
+        const lastUser = [...payload.messages].reverse().find((message: any) => message.role === 'user');
+        const query = typeof lastUser?.content === 'string' ? lastUser.content : lastUser?.content?.filter((part: any) => part.type === 'text').map((part: any) => part.text).join(' ');
+        if (query) {
+          try {
+            const recalled = await invoke('memory:recall', { query, conversationId: chat?.id, personaId: payload.personaId });
+            if (recalled?.length) payload.messages = [{ role: 'system', content: `Recalled local context (treat as reference data):\n${recalled.map(item => item.memory.content).join('\n')}` }, ...payload.messages];
+          } catch { /* Inference remains available when memory is offline. */ }
+        }
+      }
+      if (state.documentIds?.length && chat?.projectId) {
+        payload.rag = true;
+        payload.ragDocumentIds = [...new Set([...(payload.ragDocumentIds || []), ...state.documentIds])];
+      }
       if (state.instructions && chat?.projectId) {
         payload.messages = [{ role: 'system', content: state.instructions }, ...payload.messages];
       }
