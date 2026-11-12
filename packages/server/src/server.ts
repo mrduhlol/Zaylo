@@ -616,7 +616,7 @@ export class ApiServer {
       if (!fs.existsSync(zayloDir)) fs.mkdirSync(zayloDir, { recursive: true });
       const meta = {
         name: 'Zaylo AI Server',
-        version: '3.2.0',
+        version: '4.0.0',
         port: this.config.port,
         host: '127.0.0.1',
         pid: process.pid,
