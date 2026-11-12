@@ -1,18 +1,25 @@
 import React, { useEffect, useState } from 'react';
+import { api } from '../../api/client';
 import { ArchivedChats } from './ArchivedChats';
 import { useAppStore } from '../../stores/useAppStore';
 
 export const LibraryView: React.FC = () => {
-  const { ragDocuments, imageHistory, fetchRagDocuments, fetchImageHistory, saveImageAs, openImageFolder } = useAppStore();
+  const { ragDocuments, imageHistory, saveImageAs, openImageFolder } = useAppStore();
   const [section, setSection] = useState<'documents' | 'images' | 'archive'>('documents');
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let live = true;
-    Promise.all([fetchRagDocuments(), fetchImageHistory()]).finally(() => { if (live) setLoading(false); });
+    Promise.all([api.invoke('rag:list-documents', undefined), api.invoke('image:list-history', undefined)])
+      .then(([documents, images]) => {
+        if (!Array.isArray(documents) || !Array.isArray(images)) throw new Error('Local library is unavailable. Reopen Library in the desktop app to retry.');
+        if (live) useAppStore.setState({ ragDocuments: documents, imageHistory: images });
+      })
+      .catch(err => { if (live) setError(err instanceof Error ? err.message : 'Could not load local library. Reopen Library to retry.'); })
+      .finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, [fetchRagDocuments, fetchImageHistory]);
+  }, []);
   const run = async (action: () => Promise<unknown>) => {
     try { setError(''); await action(); } catch (err) { setError(err instanceof Error ? err.message : 'Could not open the file. Try again.'); }
   };
@@ -40,6 +47,7 @@ export const LibraryView: React.FC = () => {
       {!loading && section === 'images' && <div>
         {images.length === 0 && <p className="text-[var(--muted-foreground)]">{q ? 'No matching images.' : 'No generated images on this device yet.'}</p>}
         <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">{images.map(image => <li key={image.id} className="min-w-0 space-y-3">
+          {!image.base64Data && <p className="text-xs text-[var(--muted-foreground)]">Preview is unavailable. Use Show in folder to open the original.</p>}
           {image.base64Data && <img src={image.base64Data.startsWith('data:') ? image.base64Data : `data:image/png;base64,${image.base64Data}`} alt={image.prompt} loading="lazy" className="w-full aspect-square object-contain rounded-xl bg-[var(--card)]" />}
           <p className="text-sm break-words">{image.prompt}</p><p className="text-xs text-[var(--muted-foreground)]">{image.modelName} · {image.width} × {image.height}</p>
           <div className="flex gap-4 text-sm"><button className="underline" onClick={() => void run(() => saveImageAs(image.localPath))}>Save image as…</button><button className="underline" onClick={() => void run(() => openImageFolder(image.localPath))}>Show in folder</button></div>
