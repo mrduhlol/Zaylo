@@ -1139,6 +1139,7 @@ installConversationPrivacy(api, () => {
     conversations: state.conversations, activeConvId: state.activeConvId,
     blocked: [...state.deletedChats.map(c => c.id), ...loadLocal<string[]>('zaylo_deleted_ids', [])],
     instructions: useProjects.getState().projects.find(p => p.id === chat?.projectId)?.instructions,
+    documentIds: useProjects.getState().projects.find(p => p.id === chat?.projectId)?.documentIds,
   };
 });
 useAppStore.subscribe((state, previous) => {
