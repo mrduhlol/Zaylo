@@ -56,7 +56,16 @@ import type {
   StoredConversation,
 } from '@local-ai/shared';
 
+export interface ChatPdfRequest {
+  title: string;
+  messages: Array<{ role: string; text: string }>;
+}
+
+export type ChatPdfResult = { canceled: true } | { canceled: false; filePath: string };
+
 export interface IPCChannels {
+  'chat:export-pdf': { request: ChatPdfRequest; response: ChatPdfResult };
+
   // Hardware & Capabilities
   'hardware:get-profile': { request: void; response: HardwareProfile };
   'hardware:get-capabilities': { request: void; response: CapabilityProfile };
