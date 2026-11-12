@@ -97,6 +97,13 @@ export const Sidebar: React.FC = () => {
   const [editingTitle, setEditingTitle] = useState('');
   const [chatMenu, setChatMenu] = useState<ChatMenuState | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const focusSearch = () => { searchRef.current?.focus(); searchRef.current?.select(); };
+    window.addEventListener('zaylo:focus-chat-search', focusSearch);
+    return () => window.removeEventListener('zaylo:focus-chat-search', focusSearch);
+  }, []);
 
   const convs = conversations as SidebarConversation[];
 
@@ -235,7 +242,7 @@ export const Sidebar: React.FC = () => {
         tabIndex={0}
         role="button"
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
+          if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
             selectChat(conv.id);
           }
@@ -310,7 +317,7 @@ export const Sidebar: React.FC = () => {
       {/* New chat */}
       <button
         onClick={() => createNewChat()}
-        className="w-full flex items-center gap-2 px-3 py-2 mb-2 rounded-lg text-xs font-medium text-zinc-700 dark:text-[#A1A1AA] hover:text-zinc-900 dark:hover:text-[#F5F5F5] hover:bg-[#fafafa] dark:hover:bg-[#202020] transition-colors"
+        className="zaylo-glow-hover w-full flex items-center gap-2 px-3 py-2 mb-2 rounded-lg text-xs font-medium text-zinc-700 dark:text-[#A1A1AA] hover:text-zinc-900 dark:hover:text-[#F5F5F5] hover:bg-[#fafafa] dark:hover:bg-[#202020] transition-colors"
         title="New chat (Ctrl+Shift+O)"
       >
         <Plus className="w-4 h-4" />
@@ -322,6 +329,8 @@ export const Sidebar: React.FC = () => {
         <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-[#737373] pointer-events-none" />
         <input
           type="text"
+          ref={searchRef}
+          aria-label="Search chats"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search chats..."
