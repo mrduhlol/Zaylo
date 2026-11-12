@@ -178,4 +178,27 @@ describe('conversation state and recovery', () => {
     expect(reloaded.useProjects.getState().projects).toEqual([]);
   });
 
+  it('keeps an older request in its own project after switching chats, and isolates persona previews', async () => {
+    vi.resetModules();
+    const calls = vi.fn(async () => ({}));
+    vi.stubGlobal('window', { localStorage, electronAPI: { invoke: calls } });
+    const { useProjects } = await import('../apps/desktop/src/features/projects/useProjects');
+    const first = useProjects.getState().createProject('First');
+    const second = useProjects.getState().createProject('Second');
+    useProjects.getState().updateProject(first, { instructions: 'Use FIRST project context.', documentIds: ['first-doc'] });
+    useProjects.getState().updateProject(second, { instructions: 'Use SECOND project context.', documentIds: ['second-doc'] });
+    const { useAppStore } = await import('../apps/desktop/src/stores/useAppStore');
+    useAppStore.getState().setConversations([chat({ projectId: first }), chat({ id: 'chat-b', projectId: second })]);
+    useAppStore.getState().selectChat('chat-b');
+    const { api } = await import('../apps/desktop/src/api/client');
+    await api.invoke('inference:chat', { model: 'local', messages: [{ role: 'user', content: 'Request from the first chat' }], conversationId: 'chat-a', memory: false, memorySave: false });
+    expect(calls).toHaveBeenLastCalledWith('inference:chat', expect.objectContaining({
+      messages: expect.arrayContaining([{ role: 'system', content: 'Use FIRST project context.' }]), ragDocumentIds: ['first-doc'],
+    }));
+    const previewMessages = [{ role: 'user' as const, content: 'Test this persona' }];
+    await api.invoke('inference:chat', { model: 'local', messages: previewMessages, memory: false, memorySave: false });
+    expect(calls).toHaveBeenLastCalledWith('inference:chat', expect.objectContaining({ messages: previewMessages }));
+    expect(calls.mock.calls.at(-1)?.[1]).not.toHaveProperty('ragDocumentIds');
+  });
+
 });
