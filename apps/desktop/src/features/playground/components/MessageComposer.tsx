@@ -16,9 +16,15 @@ import {
   Palette,
   Brain,
 } from 'lucide-react';
+import { chatDrafts } from '../hooks/chatSession';
 import type { ServerState } from '@local-ai/shared';
 
 interface MessageComposerProps {
+  conversationId?: string;
+  /** Parent supplies local transcription UI; never invoke browser speech services here. */
+  voiceControl?: React.ReactNode;
+  /** Local recorder replaces the entire composer while preserving the text draft. */
+  recordingContent?: React.ReactNode;
   onSendMessage: (text: string) => void;
   onStopGeneration: () => void;
   isGenerating: boolean;
@@ -44,6 +50,9 @@ interface MessageComposerProps {
 }
 
 export const MessageComposer: React.FC<MessageComposerProps> = ({
+  conversationId = 'new',
+  voiceControl,
+  recordingContent,
   onSendMessage,
   onStopGeneration,
   isGenerating,
@@ -67,8 +76,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   onOpenChartModal,
   onOpenPresentationModal,
 }) => {
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(() => chatDrafts.get(conversationId)?.text || '');
+  useEffect(() => { chatDrafts.set(conversationId, { text: input, image: pendingImage }); }, [conversationId, input, pendingImage]);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const toolsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isToolsOpen) return;
+    const dismiss = (e: PointerEvent) => { if (!toolsRef.current?.contains(e.target as Node)) setIsToolsOpen(false); };
+    const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsToolsOpen(false); };
+    document.addEventListener('pointerdown', dismiss); document.addEventListener('keydown', escape);
+    return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape); };
+  }, [isToolsOpen]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -99,10 +117,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (isGenerating) {
-      onStopGeneration();
-      return;
-    }
+    if (isGenerating) return;
     if ((!input.trim() && !pendingImage) || !isServerRunning) return;
     const msg = input;
     setInput('');
@@ -113,7 +128,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit();
     }
@@ -188,19 +203,19 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         {/* Pending Image Attachment Pill */}
         {pendingImage && (
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 p-1.5 pl-2 bg-white dark:bg-[#191919] border border-[#eaeaea] dark:border-[#262626] rounded-xl shadow-xs">
+            <div className="flex items-center gap-2 p-1.5 pl-2 bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-xs">
               <img
                 src={pendingImage.dataUrl}
                 alt="Upload preview"
-                className="w-7 h-7 rounded-lg object-cover border border-zinc-200 dark:border-[#262626]"
+                className="w-7 h-7 rounded-lg object-cover border border-[var(--border)]"
               />
-              <span className="text-xs text-[#111111] dark:text-[#F5F5F5] truncate max-w-[200px]">
+              <span className="text-xs text-[var(--foreground)] truncate max-w-[200px]">
                 {pendingImage.name}
               </span>
               <button
                 type="button"
                 onClick={() => onSetPendingImage(undefined)}
-                className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-[#F5F5F5] transition-colors"
+                className="p-1 text-zinc-400 hover:text-[var(--foreground)] transition-colors"
                 title="Remove attachment"
               >
                 <X className="w-3.5 h-3.5" />
@@ -209,17 +224,19 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
             {!isVisionSupported && (
               <span className="text-xs text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 px-2.5 py-1 rounded-lg">
-                ⚠️ Active model is text-only. Multimodal images require a vision model.
+                Active model is text-only. Multimodal images require a vision model.
               </span>
             )}
           </div>
         )}
 
         {/* Floating Composer Container */}
-        <div className="relative rounded-2xl border border-[#eaeaea] dark:border-[#262626] focus-within:border-zinc-400 dark:focus-within:border-[#737373] bg-white dark:bg-[#141414] shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.3)] transition-all px-4 pt-3.5 pb-2.5">
+        <div className="zaylo-composer-glow relative rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] transition-colors px-4 pt-3.5 pb-2.5">
+          {recordingContent || <>
           {/* Textarea */}
           <textarea
             ref={textareaRef}
+            aria-label="Message"
             rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -231,41 +248,42 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 : 'Ask anything...'
             }
             disabled={!isServerRunning}
-            className="w-full bg-transparent pr-12 text-sm text-[#111111] dark:text-[#F5F5F5] placeholder-zinc-400 dark:placeholder-[#737373] focus:outline-none resize-none font-sans leading-relaxed select-text min-h-[38px] max-h-[180px]"
+            className="w-full bg-transparent pr-12 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none resize-none font-sans leading-relaxed select-text min-h-[38px] max-h-[180px]"
           />
 
           <input
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept="image/*,.pdf,.txt,.md,.json"
+            accept="image/*"
             className="hidden"
           />
 
           {/* Bottom Controls Row inside Composer */}
           <div className="flex items-center justify-between pt-2 border-t border-transparent select-none">
             {/* Left Tools: Plus, Paperclip, RAG toggle */}
-            <div className="flex items-center gap-2.5 text-zinc-500 dark:text-[#A1A1AA]">
+            <div className="flex items-center gap-2.5 text-[var(--muted-foreground)]">
               {/* Plus Action */}
-              <div className="relative">
+              <div ref={toolsRef} className="relative">
                 <button
                   type="button"
                   onClick={() => setIsToolsOpen(!isToolsOpen)}
-                  className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-[#202020] hover:text-[#111111] dark:hover:text-[#F5F5F5] transition-colors"
+                  className="p-1 rounded-md hover:bg-[var(--accent)] hover:text-[var(--foreground)] transition-colors"
                   title="Tools & Prompts"
+                  aria-label="Tools and prompts" aria-expanded={isToolsOpen}
                 >
                   <Plus className="w-4 h-4" />
                 </button>
 
                 {isToolsOpen && (
-                  <div className="absolute bottom-full mb-2 left-0 w-56 rounded-xl bg-white dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] shadow-xl py-1.5 z-50 text-xs">
+                  <div className="absolute bottom-full mb-2 left-0 w-56 rounded-xl bg-[var(--card)] border border-[var(--border)] shadow-xl py-1.5 z-50 text-xs">
                     <button
                       type="button"
                       onClick={() => {
                         onOpenChartModal?.();
                         setIsToolsOpen(false);
                       }}
-                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-zinc-50 dark:hover:bg-[#202020] text-zinc-700 dark:text-[#A1A1AA] hover:text-[#111111] dark:hover:text-[#F5F5F5]"
+                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >
                       <BarChart2 className="w-3.5 h-3.5 text-zinc-500" />
                       <span>Generate AI Chart</span>
@@ -276,7 +294,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                         onOpenPresentationModal?.();
                         setIsToolsOpen(false);
                       }}
-                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-zinc-50 dark:hover:bg-[#202020] text-zinc-700 dark:text-[#A1A1AA] hover:text-[#111111] dark:hover:text-[#F5F5F5]"
+                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >
                       <Presentation className="w-3.5 h-3.5 text-zinc-500" />
                       <span>Create Presentation (.pptx)</span>
@@ -288,7 +306,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                         setIsToolsOpen(false);
                         textareaRef.current?.focus();
                       }}
-                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-zinc-50 dark:hover:bg-[#202020] text-zinc-700 dark:text-[#A1A1AA] hover:text-[#111111] dark:hover:text-[#F5F5F5]"
+                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >
                       <TrendingUp className="w-3.5 h-3.5 text-zinc-500" />
                       <span>Analyze Dataset</span>
@@ -300,22 +318,22 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                         setInput('Extract the design theme, color palette, and layout from this reference image: ');
                         setIsToolsOpen(false);
                       }}
-                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-zinc-50 dark:hover:bg-[#202020] text-zinc-700 dark:text-[#A1A1AA] hover:text-[#111111] dark:hover:text-[#F5F5F5]"
+                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >
                       <Palette className="w-3.5 h-3.5 text-zinc-500" />
                       <span>Use Reference Design</span>
                     </button>
-                    <div className="my-1 border-t border-[#eaeaea] dark:border-[#262626]" />
+                    <div className="my-1 border-t border-[var(--border)]" />
                     <button
                       type="button"
                       onClick={() => {
                         fileInputRef.current?.click();
                         setIsToolsOpen(false);
                       }}
-                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-zinc-50 dark:hover:bg-[#202020] text-zinc-700 dark:text-[#A1A1AA] hover:text-[#111111] dark:hover:text-[#F5F5F5]"
+                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >
                       <Paperclip className="w-3.5 h-3.5" />
-                      <span>Upload Document/Image</span>
+                      <span>Attach image</span>
                     </button>
                     <button
                       type="button"
@@ -323,7 +341,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                         onOpenRagModal();
                         setIsToolsOpen(false);
                       }}
-                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-zinc-50 dark:hover:bg-[#202020] text-zinc-700 dark:text-[#A1A1AA] hover:text-[#111111] dark:hover:text-[#F5F5F5]"
+                      className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >
                       <FileText className="w-3.5 h-3.5" />
                       <span>Manage RAG Library</span>
@@ -336,8 +354,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-[#202020] hover:text-[#111111] dark:hover:text-[#F5F5F5] transition-colors"
-                title="Attach file or image"
+                className="p-1 rounded-md hover:bg-[var(--accent)] hover:text-[var(--foreground)] transition-colors"
+                title="Attach image"
               >
                 <Paperclip className="w-4 h-4" />
               </button>
@@ -347,13 +365,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 <button
                   type="button"
                   onClick={onOpenRagModal}
-                  className="flex items-center gap-1 text-xs font-medium text-zinc-600 dark:text-[#A1A1AA] hover:text-[#111111] dark:hover:text-[#F5F5F5] transition-colors"
+                  className="flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
                   title="RAG Context Knowledge"
                 >
                   <Layers className="w-3.5 h-3.5" />
                   <span>RAG</span>
                   {ragDocsCount > 0 && (
-                    <span className="text-[10px] font-mono text-zinc-400 dark:text-[#737373]">({ragDocsCount})</span>
+                    <span className="text-[10px] font-mono text-[var(--muted-foreground)]">({ragDocsCount})</span>
                   )}
                 </button>
 
@@ -362,13 +380,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   type="button"
                   onClick={() => onToggleRag?.()}
                   className={`w-8 h-4.5 rounded-full p-0.5 transition-colors focus:outline-none ${
-                    ragEnabled ? 'bg-black dark:bg-white' : 'bg-zinc-200 dark:bg-[#262626]'
+                    ragEnabled ? 'bg-[var(--foreground)]' : 'bg-[var(--border)]'
                   }`}
+                  role="switch" aria-checked={ragEnabled} aria-label="Document context"
                   title={ragEnabled ? 'Disable RAG' : 'Enable RAG'}
                 >
                   <div
                     className={`w-3.5 h-3.5 rounded-full transition-transform ${
-                      ragEnabled ? 'translate-x-3.5 bg-white dark:bg-black' : 'translate-x-0 bg-white dark:bg-[#A1A1AA]'
+                      ragEnabled ? 'translate-x-3.5 bg-[var(--background)]' : 'translate-x-0 bg-[var(--muted-foreground)]'
                     }`}
                   />
                 </button>
@@ -379,7 +398,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 <button
                   type="button"
                   onClick={() => onOpenMemorySection?.()}
-                  className="flex items-center gap-1 text-xs font-medium text-zinc-600 dark:text-[#A1A1AA] hover:text-[#111111] dark:hover:text-[#F5F5F5] transition-colors"
+                  className="flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
                   title={
                     loftyDbConnected
                       ? 'Open LoftyDB Memory Studio'
@@ -389,15 +408,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   <Brain className={`w-3.5 h-3.5 ${loftyDbConnected && memoryEnabled ? 'text-emerald-500' : ''}`} />
                   <span>Memory</span>
                   {memoryCount > 0 && (
-                    <span className="text-[10px] font-mono text-zinc-400 dark:text-[#737373]">({memoryCount})</span>
+                    <span className="text-[10px] font-mono text-[var(--muted-foreground)]">({memoryCount})</span>
                   )}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => onToggleMemory?.()}
+                  disabled={!onToggleMemory}
+                  role="switch" aria-checked={memoryEnabled && loftyDbConnected} aria-label="Memory recall"
                   className={`w-8 h-4.5 rounded-full p-0.5 transition-colors focus:outline-none ${
-                    memoryEnabled && loftyDbConnected ? 'bg-black dark:bg-white' : 'bg-zinc-200 dark:bg-[#262626]'
+                    memoryEnabled && loftyDbConnected ? 'bg-[var(--foreground)]' : 'bg-[var(--border)]'
                   }`}
                   title={
                     !loftyDbConnected
@@ -410,8 +431,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   <div
                     className={`w-3.5 h-3.5 rounded-full transition-transform ${
                       memoryEnabled && loftyDbConnected
-                        ? 'translate-x-3.5 bg-white dark:bg-black'
-                        : 'translate-x-0 bg-white dark:bg-[#A1A1AA]'
+                        ? 'translate-x-3.5 bg-[var(--background)]'
+                        : 'translate-x-0 bg-[var(--muted-foreground)]'
                     }`}
                   />
                 </button>
@@ -419,22 +440,23 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             </div>
 
             {/* Right Control: Black/White Send / Stop Button */}
-            <div>
+            <div className="flex items-center gap-2">
+              {voiceControl}
               {isGenerating ? (
                 <button
                   type="button"
                   onClick={onStopGeneration}
-                  className="w-8 h-8 rounded-xl bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 flex items-center justify-center transition-transform active:scale-95 shadow-sm"
+                  className="h-8 px-3 gap-2 rounded-xl bg-[var(--foreground)] text-[var(--background)] flex items-center justify-center" aria-label="Stop generation"
                   title="Stop generating"
                 >
-                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <Square className="w-3.5 h-3.5 fill-current" /><span className="text-xs">Stop</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => handleSubmit()}
                   disabled={(!input.trim() && !pendingImage) || !isServerRunning}
-                  className="w-8 h-8 rounded-xl bg-black dark:bg-white text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 disabled:opacity-30 disabled:hover:bg-black dark:disabled:hover:bg-white flex items-center justify-center transition-transform active:scale-95 shadow-sm"
+                  className="w-8 h-8 rounded-xl bg-[var(--foreground)] text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 disabled:opacity-30 disabled:hover:bg-black dark:disabled:hover:bg-white flex items-center justify-center transition-transform active:scale-95 shadow-sm"
                   title="Send prompt (Enter)"
                 >
                   <SendHorizonal className="w-4 h-4" />
@@ -442,6 +464,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               )}
             </div>
           </div>
+          </>}
         </div>
       </div>
     </div>
