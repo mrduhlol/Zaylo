@@ -124,4 +124,55 @@ describe('conversation state and recovery', () => {
     const reloaded = await import('../apps/desktop/src/stores/useAppStore');
     expect(reloaded.useAppStore.getState().activeConvId).toBe(id);
   });
+
+  it('keeps deletion during an in-flight sync hidden, and retains a tombstone after permanent deletion', async () => {
+    vi.resetModules();
+    let resolveSync!: (value: PlaygroundConversation[]) => void;
+    const calls = vi.fn(async (channel: string) => channel === 'memory:sync-conversations' ? new Promise<PlaygroundConversation[]>(resolve => { resolveSync = resolve; }) : true);
+    vi.stubGlobal('window', { localStorage, electronAPI: { invoke: calls } });
+    const { useAppStore } = await import('../apps/desktop/src/stores/useAppStore');
+    const store = () => useAppStore.getState();
+    store().setConversations([chat()]);
+    useAppStore.setState({ loftyDbStatus: { connected: true } as any });
+    const syncing = store().syncConversationsWithLoftyDb();
+    store().deleteChat('chat-a');
+    resolveSync([chat()]);
+    await syncing;
+    expect(store().conversations.some(item => item.id === 'chat-a')).toBe(false);
+    expect(calls).not.toHaveBeenCalledWith('memory:delete-conversation', expect.anything());
+    await store().permanentlyDeleteChat('chat-a');
+    expect(calls).toHaveBeenCalledWith('memory:delete-conversation', { id: 'chat-a' });
+    expect(JSON.parse(storage.get('zaylo_deleted_ids')!)).toContain('chat-a');
+    expect(store().deletedChats).toEqual([]);
+    expect(store().undoAction).toBeUndefined();
+    const nextSync = store().syncConversationsWithLoftyDb();
+    resolveSync([chat()]);
+    await nextSync;
+    expect(store().conversations.some(item => item.id === 'chat-a')).toBe(false);
+  });
+
+  it('never selects an archived chat on reload or through selection', async () => {
+    vi.resetModules();
+    storage.set('zaylo_playground_conversations_v3', JSON.stringify([chat({ archivedAt: 5, messages: [] })]));
+    storage.set('zaylo_active_conversation', JSON.stringify('chat-a'));
+    const { useAppStore } = await import('../apps/desktop/src/stores/useAppStore');
+    const state = useAppStore.getState();
+    expect(state.activeConvId).not.toBe('chat-a');
+    expect(state.conversations[0].archivedAt).toBeUndefined();
+    state.selectChat('chat-a');
+    expect(useAppStore.getState().activeConvId).toBe(state.activeConvId);
+  });
+
+  it('persists real project document references and instructions across reload', async () => {
+    vi.resetModules();
+    const { useProjects } = await import('../apps/desktop/src/features/projects/useProjects');
+    const id = useProjects.getState().createProject('Research');
+    useProjects.getState().updateProject(id, { instructions: 'Cite attached evidence.', documentIds: ['uploaded-document'] });
+    vi.resetModules();
+    const reloaded = await import('../apps/desktop/src/features/projects/useProjects');
+    expect(reloaded.useProjects.getState().projects).toEqual([expect.objectContaining({ id, name: 'Research', instructions: 'Cite attached evidence.', documentIds: ['uploaded-document'] })]);
+    reloaded.useProjects.getState().deleteProject(id);
+    expect(reloaded.useProjects.getState().projects).toEqual([]);
+  });
+
 });
