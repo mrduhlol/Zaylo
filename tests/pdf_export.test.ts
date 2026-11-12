@@ -4,7 +4,11 @@ const mocks = vi.hoisted(() => ({
   handle: vi.fn(), removeHandler: vi.fn(), save: vi.fn(), write: vi.fn(),
   load: vi.fn(), print: vi.fn(), destroy: vi.fn(), create: vi.fn(),
 }));
-vi.mock('electron', () => ({
+const electronPath = await vi.hoisted(async () => {
+  const { createRequire } = await import('node:module');
+  return createRequire(`${process.cwd()}/apps/desktop/package.json`).resolve('electron');
+});
+vi.mock(electronPath, () => ({
   ipcMain: { handle: mocks.handle, removeHandler: mocks.removeHandler },
   dialog: { showSaveDialog: mocks.save },
   BrowserWindow: class {
