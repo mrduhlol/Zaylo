@@ -1,3 +1,4 @@
+import { ModelCapabilityRegistry } from '@local-ai/capabilities';
 import { create } from 'zustand';
 import { api } from '../api/client';
 import { branchThrough, canSaveMemory, installConversationPrivacy, mergeHistory, savedHistory } from '../features/conversations/lifecycle';
@@ -381,8 +382,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
     return newId;
   },
   selectChat: (id) => {
-    if (!get().conversations.some(chat => chat.id === id && !chat.archivedAt)) return;
-    set({ activeConvId: id, activeTab: 'playground' });
+    const state = get();
+    const conversation = state.conversations.find(chat => chat.id === id && !chat.archivedAt);
+    if (!conversation) return;
+    const textModel = state.installedModels.find(model => !ModelCapabilityRegistry.isImageGenerationModel(model));
+    // Carry forward the 3.3 presentation fix without starting/stopping a runtime.
+    set({ activeConvId: id, activeTab: 'playground', selectedModel: conversation.modelId || conversation.modelName || state.serverInstance?.modelName || textModel?.name || '' });
   },
   deletedChats: loadLocal<PlaygroundConversation[]>('zaylo_deleted_chats', []),
   deleteChat: (id) => {
