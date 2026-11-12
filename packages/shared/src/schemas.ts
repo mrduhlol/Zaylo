@@ -64,6 +64,7 @@ export const ChatCompletionRequestSchema = z.object({
   rag: z.boolean().optional().default(false),
   ragDocumentIds: z.array(z.string()).optional(),
   memory: z.boolean().optional(),
+  memorySave: z.boolean().optional(),
   memoryScope: z.enum(['all', 'global', 'persona', 'conversation']).optional(),
   conversationId: z.string().optional(),
   personaId: z.string().optional(),
