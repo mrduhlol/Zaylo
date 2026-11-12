@@ -23,6 +23,8 @@ interface MessageComposerProps {
   conversationId?: string;
   /** Parent supplies local transcription UI; never invoke browser speech services here. */
   voiceControl?: React.ReactNode;
+  /** Local recorder replaces the entire composer while preserving the text draft. */
+  recordingContent?: React.ReactNode;
   onSendMessage: (text: string) => void;
   onStopGeneration: () => void;
   isGenerating: boolean;
@@ -50,6 +52,7 @@ interface MessageComposerProps {
 export const MessageComposer: React.FC<MessageComposerProps> = ({
   conversationId = 'new',
   voiceControl,
+  recordingContent,
   onSendMessage,
   onStopGeneration,
   isGenerating,
@@ -229,6 +232,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
         {/* Floating Composer Container */}
         <div className="zaylo-composer-glow relative rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] transition-colors px-4 pt-3.5 pb-2.5">
+          {recordingContent || <>
           {/* Textarea */}
           <textarea
             ref={textareaRef}
@@ -460,6 +464,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               )}
             </div>
           </div>
+          </>}
         </div>
       </div>
     </div>
