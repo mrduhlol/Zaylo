@@ -6,6 +6,7 @@ import {
   Image as ImageIcon,
   Trash2,
 } from 'lucide-react';
+import { useWorkspacePreferences } from '../../../stores/useWorkspacePreferences';
 import type { ChatMessage } from '@local-ai/shared';
 import { MessageBubble } from './MessageBubble';
 import type { UnifiedModelOption, InferenceGenerationStats } from '../types';
@@ -40,6 +41,7 @@ export const ConversationArea: React.FC<ConversationAreaProps> = ({
   onTriggerImageUpload,
   onSaveToMemory,
 }) => {
+  const builderMode = useWorkspacePreferences((state) => state.builderMode);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,13 +51,13 @@ export const ConversationArea: React.FC<ConversationAreaProps> = ({
   const handleSuggestionClick = (type: string) => {
     switch (type) {
       case 'code':
-        onSelectSuggestion('Write an asynchronous, in-memory cache in TypeScript with sliding TTL expiration and cleanup.');
+        onSelectSuggestion(builderMode ? 'Write an asynchronous, in-memory cache in TypeScript with sliding TTL expiration and cleanup.' : 'Help me write a clear, friendly message. Ask me who it is for and what I want to say.');
         break;
       case 'sql':
-        onSelectSuggestion('Write an optimized PostgreSQL query using window functions to calculate running monthly revenue by customer tier.');
+        onSelectSuggestion(builderMode ? 'Write an optimized PostgreSQL query using window functions to calculate running monthly revenue by customer tier.' : 'Help me make a practical plan for my week. Ask about my priorities and available time.');
         break;
       case 'summarize':
-        onSelectSuggestion('Summarize the operational and privacy advantages of running local offline LLMs versus cloud AI APIs.');
+        onSelectSuggestion(builderMode ? 'Summarize the operational and privacy advantages of running local offline LLMs versus cloud AI APIs.' : 'Help me summarize a piece of writing. Ask me to paste the text and tell you how short the summary should be.');
         break;
       case 'image':
         if (onTriggerImageUpload) {
@@ -90,25 +92,25 @@ export const ConversationArea: React.FC<ConversationAreaProps> = ({
             {/* 1. Write Code */}
             <button
               onClick={() => handleSuggestionClick('code')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl zaylo-glow-hover bg-[var(--card)] border border-[var(--border)] text-xs sm:text-sm font-medium text-[var(--foreground)] transition-transform motion-safe:hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs sm:text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] cursor-pointer"
             >
               <Code className="w-4 h-4 text-[var(--foreground)]" />
-              <span>Write Code</span>
+              <span>{builderMode ? 'Write code' : 'Write a message'}</span>
             </button>
 
             {/* 2. Query SQL */}
             <button
               onClick={() => handleSuggestionClick('sql')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl zaylo-glow-hover bg-[var(--card)] border border-[var(--border)] text-xs sm:text-sm font-medium text-[var(--foreground)] transition-transform motion-safe:hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs sm:text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] cursor-pointer"
             >
               <Database className="w-4 h-4 text-[var(--foreground)]" />
-              <span>Query SQL</span>
+              <span>{builderMode ? 'Query SQL' : 'Make a plan'}</span>
             </button>
 
             {/* 3. Summarize */}
             <button
               onClick={() => handleSuggestionClick('summarize')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl zaylo-glow-hover bg-[var(--card)] border border-[var(--border)] text-xs sm:text-sm font-medium text-[var(--foreground)] transition-transform motion-safe:hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs sm:text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] cursor-pointer"
             >
               <FileText className="w-4 h-4 text-[var(--foreground)]" />
               <span>Summarize</span>
@@ -117,7 +119,7 @@ export const ConversationArea: React.FC<ConversationAreaProps> = ({
             {/* 4. Analyze Image */}
             <button
               onClick={() => handleSuggestionClick('image')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl zaylo-glow-hover bg-[var(--card)] border border-[var(--border)] text-xs sm:text-sm font-medium text-[var(--foreground)] transition-transform motion-safe:hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs sm:text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] cursor-pointer"
             >
               <ImageIcon className="w-4 h-4 text-[var(--foreground)]" />
               <span>Analyze Image</span>
@@ -163,7 +165,7 @@ export const ConversationArea: React.FC<ConversationAreaProps> = ({
                 index={idx}
                 isStreaming={isCurrentlyStreaming}
                 modelName={selectedModel?.name}
-                stats={isLastAssistant ? generationStats : undefined}
+                stats={builderMode && isLastAssistant ? generationStats : undefined}
                 onRegenerate={isLastAssistant ? onRegenerate : undefined}
                 onRetry={isLastAssistant ? onRetry : undefined}
                 onSaveToMemory={onSaveToMemory}
