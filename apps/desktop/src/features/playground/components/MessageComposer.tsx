@@ -17,6 +17,7 @@ import {
   Brain,
 } from 'lucide-react';
 import { chatDrafts } from '../hooks/chatSession';
+import { VoiceInput } from '../../voice/VoiceInput';
 import type { ServerState } from '@local-ai/shared';
 
 interface MessageComposerProps {
@@ -76,6 +77,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   onOpenChartModal,
   onOpenPresentationModal,
 }) => {
+  const [voiceContainer, setVoiceContainer] = useState<HTMLDivElement | null>(null);
+  const [voiceActive, setVoiceActive] = useState(false);
   const [input, setInput] = useState(() => chatDrafts.get(conversationId)?.text || '');
   useEffect(() => { chatDrafts.set(conversationId, { text: input, image: pendingImage }); }, [conversationId, input, pendingImage]);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
@@ -231,8 +234,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         )}
 
         {/* Floating Composer Container */}
-        <div className="zaylo-composer-glow relative rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] transition-colors px-4 pt-3.5 pb-2.5">
-          {recordingContent || <>
+        <div ref={setVoiceContainer} className="zaylo-composer-glow relative rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] transition-colors px-4 pt-3.5 pb-2.5">
+          {recordingContent || <div inert={voiceActive || undefined} style={voiceActive ? { visibility: 'hidden' } : undefined}>
           {/* Textarea */}
           <textarea
             ref={textareaRef}
@@ -441,7 +444,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
             {/* Right Control: Black/White Send / Stop Button */}
             <div className="flex items-center gap-2">
-              {voiceControl}
+              {voiceControl || <VoiceInput container={voiceContainer} disabled={isGenerating}
+                onActiveChange={setVoiceActive}
+                onTranscript={(text, review) => {
+                  if (review || !isServerRunning) { setInput(text); textareaRef.current?.focus(); }
+                  else { setInput(''); onSendMessage(text); }
+                }} />}
               {isGenerating ? (
                 <button
                   type="button"
@@ -464,7 +472,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               )}
             </div>
           </div>
-          </>}
+          </div>}
         </div>
       </div>
     </div>
