@@ -117,7 +117,7 @@ export class InferenceService {
       throw new ModelNotLoadedError('No inference model is currently loaded');
     }
 
-    const release = await this.queue.acquire();
+    const release = await this.queue.acquire(externalSignal);
     const requestId = `chatcmpl-${crypto.randomBytes(12).toString('hex')}`;
     const abortController = new AbortController();
     this.activeAbortControllers.set(requestId, abortController);
@@ -127,12 +127,12 @@ export class InferenceService {
     let completionTokens = 0;
     let accumulatedContent = '';
 
-    // If external signal aborts, abort our internal controller
-    if (externalSignal) {
-      externalSignal.addEventListener('abort', () => abortController.abort());
-    }
+    const onAbort = () => abortController.abort(externalSignal?.reason);
+    externalSignal?.addEventListener('abort', onAbort, { once: true });
+    if (externalSignal?.aborted) onAbort();
 
     try {
+      abortController.signal.throwIfAborted();
       this.totalRequests++;
 
       // Automatically augment messages with local document context if RAG is requested
@@ -219,10 +219,12 @@ export class InferenceService {
         }
       }
 
+      abortController.signal.throwIfAborted();
       const stream = this.currentRuntime.chatStream(effectiveRequest, abortController.signal);
       let sentSources = false;
 
       for await (const chunk of stream) {
+        abortController.signal.throwIfAborted();
         if (!firstTokenTime) {
           firstTokenTime = Date.now();
         }
@@ -280,6 +282,7 @@ export class InferenceService {
       });
       throw err;
     } finally {
+      externalSignal?.removeEventListener('abort', onAbort);
       this.activeAbortControllers.delete(requestId);
       release();
     }
