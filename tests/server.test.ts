@@ -213,6 +213,42 @@ describe('ApiServer', () => {
     expect(text).toContain('Response.');
   });
 
+  it.each([
+    'http://localhost:8080/chat',
+    'https://attacker.example/localhost:8080',
+    'https://attacker.example/:8080',
+  ])('rejects spoofed Referer from LAN clients: %s', async (referer) => {
+    const response = await (server as any).fastify.inject({
+      method: 'GET', url: '/metrics', remoteAddress: '192.168.1.20',
+      headers: { host: 'localhost:8080', referer },
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it.each(['127.0.0.1', '::1', '::ffff:127.0.0.1'])('allows local-only loopback access: %s', async (remoteAddress) => {
+    server.updateConfig({ lanEnabled: false });
+    const response = await (server as any).fastify.inject({
+      method: 'GET', url: '/metrics', remoteAddress,
+    });
+    expect(response.statusCode).toBe(200);
+    server.updateConfig({ lanEnabled: true });
+    const lanResponse = await (server as any).fastify.inject({
+      method: 'GET', url: '/metrics', remoteAddress,
+    });
+    expect(lanResponse.statusCode).toBe(401);
+  });
+
+  it('requires a valid key for LAN clients regardless of forwarded IP headers', async () => {
+    const inject = (headers: Record<string, string>) => (server as any).fastify.inject({
+      method: 'GET', url: '/metrics', remoteAddress: '192.168.1.20', headers,
+    });
+    expect((await inject({ 'x-forwarded-for': '127.0.0.1' })).statusCode).toBe(401);
+    expect((await inject({ authorization: 'Bearer invalid' })).statusCode).toBe(401);
+    const { rawKey } = keyManager.generateKey('LAN regression');
+    expect((await inject({ authorization: `Bearer ${rawKey}` })).statusCode).toBe(200);
+    expect((await inject({ 'x-api-key': rawKey })).statusCode).toBe(200);
+  });
+
   it('should require authentication when LAN mode is enabled and request lacks key', async () => {
     server.updateConfig({ lanEnabled: true });
 
