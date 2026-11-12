@@ -2,4 +2,8 @@ export * from './types.js';
 export * from './PersonasView.js';
 export * from './components/PersonaCard.js';
 export * from './components/PersonaEditorModal.js';
+export * from './components/PersonaImportExportDialog.js';
+export * from './components/PersonaPreviewChat.js';
 export * from './components/PlaygroundPersonaSelector.js';
+export * from './utils/personaIO.js';
+export * from './utils/personaExamples.js';
