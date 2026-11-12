@@ -111,6 +111,12 @@ export interface IPCChannels {
   'inference:chat': { request: ChatCompletionRequest; response: ChatCompletionResponse };
   'inference:abort': { request: { requestId: string }; response: boolean };
 
+  // Local speech setup is explicit; recordings are never sent to a cloud API.
+  'voice:status': { request: undefined; response: { ready: boolean; installing: boolean; model: string } };
+  'voice:setup': { request: undefined; response: { ready: boolean; installing: boolean; model: string } };
+  'voice:transcribe': { request: { audioBase64: string }; response: { text: string; language: string } };
+  'voice:cancel': { request: undefined; response: boolean };
+
   // Knowledge & Local Document RAG
   'rag:list-documents': { request: void; response: DocumentInfo[] };
   'rag:add-document': { request: { name: string; content: string; type?: DocumentType }; response: DocumentInfo };
