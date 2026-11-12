@@ -44,6 +44,8 @@ export const ConversationArea: React.FC<ConversationAreaProps> = ({
 }) => {
   const builderMode = useWorkspacePreferences((state) => state.builderMode);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const welcome = messages.find(message => message.role === 'assistant');
+  const greeting = typeof welcome?.content === 'string' && welcome.content.trim() ? welcome.content : 'A little curiosity goes a long way.';
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
@@ -82,8 +84,8 @@ export const ConversationArea: React.FC<ConversationAreaProps> = ({
             <h1 className="text-3xl sm:text-4xl font-semibold text-[var(--foreground)] tracking-tight font-sans">
               What can I help you with?
             </h1>
-            <p className="text-base sm:text-lg text-[var(--muted-foreground)] font-normal">
-              A little curiosity goes a long way.
+            <p key={greeting} tabIndex={greeting.length > 180 ? 0 : undefined} className="mx-auto max-h-28 max-w-2xl overflow-auto whitespace-pre-wrap break-words text-base sm:text-lg text-[var(--muted-foreground)] font-normal focus-visible:outline focus-visible:outline-[var(--theme-accent)]">
+              {greeting}
             </p>
           </div>
 
