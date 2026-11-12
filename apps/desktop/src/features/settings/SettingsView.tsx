@@ -1,378 +1,116 @@
-import React, { useState } from 'react';
-import {
-  Settings,
-  Folder,
-  Save,
-  Check,
-  Layers,
-  Zap,
-  HardDrive,
-  Sun,
-  Moon,
-  Laptop,
-} from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Atom, Search } from 'lucide-react';
 import { useAppStore } from '../../stores/useAppStore';
+import { useWorkspacePreferences, type ThemeFamily } from '../../stores/useWorkspacePreferences';
 import { api } from '../../api/client';
+import { controlClass, SettingsRow, SettingsSelect, SettingsToggle, ThemeArtwork } from './SettingsControls';
+import { shortcutConflict, shortcutFromEvent, shortcutLabels } from './useWorkspaceShortcuts';
 
-export const SettingsView: React.FC = () => {
-  const { serverConfig, updateServerConfig, theme, themePreference, setThemePreference } = useAppStore();
+const categories = ['General', 'Appearance', 'Chat', 'Voice', 'Models', 'Privacy & data', 'Keybindings', 'Archived chats'];
+const builderCategories = ['Compute & memory', 'Server & concurrency', 'Storage'];
+const families: { value: ThemeFamily; label: string }[] = [
+  { value: 't3-chat', label: 'T3 Chat' }, { value: 'grove', label: 'Grove' },
+  { value: 'ocean', label: 'Ocean' }, { value: 'ember', label: 'Ember' }, { value: 'iris', label: 'Iris' },
+];
+const numericFields = [
+  { key: 'gpuLayers', label: 'GPU offload layers', min: 0, max: 999, description: '99 requests offloading all layers to the GPU.' },
+  { key: 'threads', label: 'CPU threads', min: 1, max: 64, description: 'CPU threads allocated to inference.' },
+  { key: 'contextLimit', label: 'Default context limit', min: 512, max: 131072, description: 'Maximum tokens in the context window.' },
+  { key: 'port', label: 'Server port', min: 1024, max: 65535, description: 'Default: 8080. Inference API: /v1.' },
+  { key: 'maxConcurrentRequests', label: 'Max concurrent requests', min: 1, max: 32, description: 'Limit simultaneous requests to control memory usage.' },
+] as const;
 
-  const [port, setPort] = useState(serverConfig?.port || 8080);
-  const [maxConcurrency, setMaxConcurrency] = useState(serverConfig?.maxConcurrentRequests || 4);
-  const [contextLimit, setContextLimit] = useState(serverConfig?.contextLimit || 4096);
-  const [gpuLayers, setGpuLayers] = useState(serverConfig?.gpuLayers ?? 99);
-  const [threads, setThreads] = useState(serverConfig?.threads || 6);
-  const [lowMemoryMode, setLowMemoryMode] = useState(serverConfig?.lowMemoryMode || false);
-  const [flashAttention, setFlashAttention] = useState(serverConfig?.flashAttention ?? true);
-  const [modelsDir, setModelsDir] = useState(serverConfig?.modelsDirectory || '');
-  const [runtimeDir, setRuntimeDir] = useState(serverConfig?.runtimeDirectory || '');
-  const [saved, setSaved] = useState(false);
-
-  const handleSelectModelsDir = async () => {
-    const dir = await api.invoke('app:select-directory', { defaultPath: modelsDir });
-    if (dir) setModelsDir(dir);
-  };
-
-  const handleSelectRuntimeDir = async () => {
-    const dir = await api.invoke('app:select-directory', { defaultPath: runtimeDir });
-    if (dir) setRuntimeDir(dir);
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await updateServerConfig({
-        port,
-        maxConcurrentRequests: maxConcurrency,
-        contextLimit,
-        gpuLayers,
-        threads,
-        lowMemoryMode,
-        flashAttention,
-        modelsDirectory: modelsDir,
-        runtimeDirectory: runtimeDir,
-      });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (err: any) {
-      alert(`Failed to save settings: ${err.message}`);
+export function SettingsView() {
+  const app = useAppStore();
+  const prefs = useWorkspacePreferences();
+  const [category, setCategory] = useState('General');
+  const [query, setQuery] = useState('');
+  const [capture, setCapture] = useState<string | null>(null);
+  const [shortcutError, setShortcutError] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const defaults = { port: 8080, maxConcurrentRequests: 4, contextLimit: 4096, gpuLayers: 99, threads: 6, lowMemoryMode: false, flashAttention: true, modelsDirectory: '', runtimeDirectory: '' };
+  const [config, setConfig] = useState({ ...defaults, ...app.serverConfig });
+  useEffect(() => {
+    if (!dirty && app.serverConfig) setConfig(current => ({ ...current, ...app.serverConfig }));
+  }, [app.serverConfig, dirty]);
+  useEffect(() => { if (!prefs.builderMode && builderCategories.includes(category)) setCategory('General'); }, [prefs.builderMode, category]);
+  const changeConfig = (patch: Partial<typeof config>) => { setDirty(true); setMessage(''); setConfig(current => ({ ...current, ...patch })); };
+  const save = async () => {
+    setError(''); setMessage('');
+    for (const field of numericFields) {
+      const value = config[field.key];
+      if (!Number.isInteger(value) || value < field.min || value > field.max) { setError(`${field.label} must be a whole number between ${field.min} and ${field.max}.`); return; }
     }
+    setSaving(true);
+    try {
+      await app.updateServerConfig({ port: config.port, maxConcurrentRequests: config.maxConcurrentRequests, contextLimit: config.contextLimit, gpuLayers: config.gpuLayers, threads: config.threads, lowMemoryMode: config.lowMemoryMode, flashAttention: config.flashAttention, modelsDirectory: config.modelsDirectory, runtimeDirectory: config.runtimeDirectory });
+      setDirty(false); setMessage('Server and runtime settings saved.');
+    } catch (failure) { setError(`Settings could not be saved: ${failure instanceof Error ? failure.message : String(failure)}`); }
+    finally { setSaving(false); }
   };
+  const browse = async (key: 'modelsDirectory' | 'runtimeDirectory') => {
+    try { const directory = await api.invoke('app:select-directory', { defaultPath: config[key] }); if (directory) changeConfig({ [key]: directory }); }
+    catch (failure) { setError(`Directory picker failed: ${failure instanceof Error ? failure.message : String(failure)}. You can enter the path manually.`); }
+  };
+  const toggle = (label: string, checked: boolean, onChange: (value: boolean) => void) => <SettingsToggle label={label} checked={checked} onChange={onChange} />;
+  const range = (label: string, value: number, min: number, max: number, step: number, onChange: (value: number) => void, suffix = '') => <label className="flex items-center gap-3 text-sm"><span className="sr-only">{label}</span><input aria-label={label} type="range" min={min} max={max} step={step} value={value} onChange={event => onChange(Number(event.target.value))} className="w-32 accent-violet-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-500 dark:accent-violet-400" /><output className="w-12 text-right tabular-nums">{Math.round(value * (max === 1 ? 100 : 1))}{suffix}</output></label>;
+  type Option = { category: string; title: string; description?: string; control?: ReactNode };
+  const options: Option[] = [
+    { category: 'General', title: 'On startup', description: 'Start a fresh conversation or continue where you left off.', control: <SettingsSelect label="On startup" value={prefs.startupBehavior} options={[{ value: 'new-chat', label: 'New chat' }, { value: 'continue', label: 'Continue where I left off' }]} onChange={value => prefs.setStartupBehavior(value as 'new-chat' | 'continue')} /> },
+    { category: 'General', title: 'Builder mode', description: 'Show the original technical tools above New chat and advanced settings below.', control: toggle('Builder mode', prefs.builderMode, prefs.setBuilderMode) },
+    { category: 'Appearance', title: 'Appearance', description: `Currently using ${app.theme} appearance. System follows your device.`, control: <SettingsSelect label="Appearance" value={app.themePreference} options={['light', 'dark', 'system'].map(value => ({ value, label: value[0].toUpperCase() + value.slice(1) }))} onChange={value => app.setThemePreference(value as 'light' | 'dark' | 'system')} /> },
+    { category: 'Appearance', title: 'Theme family', description: 'Five original palettes. Locally authored artwork previews; no external assets or network requests.', control: <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">{families.map(family => <button key={family.value} type="button" aria-pressed={prefs.themeFamily === family.value} onClick={() => prefs.setThemeFamily(family.value)} className={`rounded-xl border p-2 text-left text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-500 ${prefs.themeFamily === family.value ? 'border-violet-600 bg-violet-50 dark:border-violet-400 dark:bg-violet-950' : 'border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800'}`}><ThemeArtwork family={family.value} /><span className="mt-2 block font-medium">{family.label}{prefs.themeFamily === family.value ? ' · Selected' : ''}</span></button>)}</div> },
+    { category: 'Appearance', title: 'Text size', description: 'Preferred interface and conversation text size.', control: range('Text size', prefs.textSize, 12, 24, 1, prefs.setTextSize, 'px') },
+    { category: 'Appearance', title: 'Animations', description: 'Allow ambient new-chat animation. Your system reduced-motion preference takes priority.', control: toggle('Animations', prefs.animationsEnabled, prefs.setAnimationsEnabled) },
+    { category: 'Appearance', title: 'Animation intensity', control: range('Animation intensity', prefs.animationIntensity, 0, 1, 0.05, prefs.setAnimationIntensity, '%') },
+    { category: 'Appearance', title: 'Translucent surfaces', description: 'Blend supported in-app surfaces. Native desktop transparency and blur are not enabled by this setting; opaque fallback may apply.', control: toggle('Translucent surfaces', prefs.translucent, prefs.setTranslucent) },
+    { category: 'Appearance', title: 'Surface opacity', description: 'Higher opacity keeps text easier to read. Applies when translucent surfaces are supported and enabled.', control: range('Surface opacity', prefs.opacity, 0.65, 1, 0.01, prefs.setOpacity, '%') },
+    { category: 'Chat', title: 'Writing messages', description: 'Enter sends a message. Shift+Enter inserts a new line. These text-editing keys are fixed.' },
+    { category: 'Voice', title: 'Review before sending', description: 'Preference for the voice flow when connected. This setting does not install a speech model or grant microphone permission.', control: toggle('Review before sending', prefs.reviewVoiceBeforeSending, prefs.setReviewVoiceBeforeSending) },
+    { category: 'Voice', title: 'Local speech setup', description: 'Speech-model setup, microphone permission and transcription require voice integration. No voice backend is configured from this panel.' },
+    { category: 'Models', title: 'Manage local models', description: 'Browse, download or import models using the existing model manager.', control: <button type="button" className={controlClass} onClick={() => app.setActiveTab('models')}>Open Models</button> },
+    { category: 'Privacy & data', title: 'Device-local preferences', description: 'Presentation preferences and keyboard shortcuts are saved in this device’s local storage. This panel does not export, import or delete conversations.' },
+    { category: 'Archived chats', title: 'Archive is not connected', description: 'The current conversation store exposes no archive records or restore action. Archived-chat search and restore need that data contract before they can be offered here.' },
+    ...numericFields.map(field => ({ category: ['port', 'maxConcurrentRequests'].includes(field.key) ? 'Server & concurrency' : 'Compute & memory', title: field.label, description: field.description, control: <input aria-label={field.label} className={`${controlClass} w-28`} type="number" min={field.min} max={field.max} step={1} value={Number.isNaN(config[field.key]) ? '' : config[field.key]} onChange={event => changeConfig({ [field.key]: event.target.value === '' ? NaN : Number(event.target.value) })} /> })),
+    { category: 'Compute & memory', title: 'Low-memory layer streaming mode', description: 'Enable quantized KV caching (-ctk q8_0 -ctv q8_0) and Flash Attention. Actual RAM savings and speed depend on the model and hardware.', control: toggle('Low-memory layer streaming mode', config.lowMemoryMode, value => changeConfig({ lowMemoryMode: value })) },
+    { category: 'Compute & memory', title: 'Flash Attention kernel', description: 'Use the runtime’s optimized attention kernel where supported.', control: toggle('Flash Attention kernel', config.flashAttention, value => changeConfig({ flashAttention: value })) },
+    ...(['modelsDirectory', 'runtimeDirectory'] as const).map(key => ({ category: 'Storage', title: key === 'modelsDirectory' ? 'Models storage directory' : 'Runtime binaries directory', control: <div className="flex w-full flex-wrap gap-2"><input aria-label={key === 'modelsDirectory' ? 'Models storage directory' : 'Runtime binaries directory'} value={config[key]} onChange={event => changeConfig({ [key]: event.target.value })} className={`${controlClass} min-w-0 flex-1`} /><button type="button" onClick={() => void browse(key)} className={controlClass}>Browse</button></div> })),
+    ...Object.entries(shortcutLabels).map(([action, title]) => ({ category: 'Keybindings', title, description: capture === action ? 'Press a shortcut with Ctrl/Command or Alt. Escape cancels; Tab leaves capture.' : undefined, control: <button type="button" data-shortcut-capture aria-label={`Change shortcut for ${title}`} aria-pressed={capture === action} className={`${controlClass} min-w-32 font-mono`} onClick={() => { setCapture(action); setShortcutError(''); }} onBlur={() => setCapture(null)} onKeyDown={event => {
+      if (capture !== action) return;
+      event.stopPropagation();
+      if (event.key === 'Tab') { setCapture(null); return; }
+      event.preventDefault();
+      if (event.key === 'Escape') { setCapture(null); setShortcutError(''); return; }
+      if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+      const shortcut = shortcutFromEvent(event.nativeEvent);
+      if (!shortcut) return;
+      if (!event.ctrlKey && !event.metaKey && !event.altKey) { setShortcutError('Include Ctrl/Command or Alt to preserve text editing.'); return; }
+      const conflict = shortcutConflict(prefs.keybindings, action, shortcut);
+      if (conflict) { setShortcutError(`Already assigned to ${shortcutLabels[conflict] || conflict}. Choose another shortcut.`); return; }
+      prefs.setKeybinding(action, shortcut); setCapture(null); setShortcutError('');
+    }}>{capture === action ? 'Press keys…' : (prefs.keybindings[action] || 'Unassigned').replace('Mod', /Mac|iPhone|iPad/.test(navigator.platform) ? 'Cmd' : 'Ctrl')}</button> })),
+  ];
+  const enabledCategories = [...categories, ...(prefs.builderMode ? builderCategories : [])];
+  const search = query.trim().toLowerCase();
+  const visible = options.filter(option => enabledCategories.includes(option.category) && (search ? `${option.category} ${option.title} ${option.description || ''}`.toLowerCase().includes(search) : option.category === category));
 
-  return (
-    <div className="p-8 space-y-8 max-w-4xl mx-auto overflow-y-auto h-[calc(100vh-4rem)]">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#202227] pb-4">
-        <div>
-          <h2 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-            <Settings className="w-4 h-4 text-zinc-900 dark:text-zinc-100" />
-            Server & Runtime Configuration
-          </h2>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Configure system ports, memory streaming modes, thread concurrency, and storage paths.
-          </p>
-        </div>
-
-        <button
-          onClick={handleSave}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-black dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-black text-xs font-medium transition-colors shadow-sm"
-        >
-          {saved ? <Check className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
-          <span>{saved ? 'Saved ✓' : 'Save Changes'}</span>
-        </button>
+  return <div className="h-full overflow-auto bg-zinc-50 text-zinc-900 selection:bg-violet-200 dark:bg-zinc-950 dark:text-zinc-100 dark:selection:bg-violet-800">
+    <div className="mx-auto max-w-6xl px-5 py-8 sm:px-10">
+      <header className="mb-8"><h1 className="flex items-center gap-3 text-2xl font-semibold"><Atom size={24} aria-hidden="true" />Settings</h1><p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Make Zaylo feel like your workspace.</p></header>
+      <div className="grid gap-8 md:grid-cols-[190px_minmax(0,1fr)]">
+        <aside><label className="relative block"><Search size={16} aria-hidden="true" className="absolute left-3 top-3 text-zinc-500" /><span className="sr-only">Search settings</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search settings" className={`${controlClass} w-full pl-9`} /></label><nav aria-label="Settings categories" className="mt-5 flex flex-wrap gap-1 md:flex-col">{enabledCategories.map(item => <button type="button" key={item} aria-current={!search && item === category ? 'page' : undefined} onClick={() => { setCategory(item); setQuery(''); setCapture(null); }} className={`rounded-lg px-3 py-2 text-left text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-500 ${!search && category === item ? 'bg-violet-100 font-medium text-violet-900 dark:bg-violet-950 dark:text-violet-200' : 'text-zinc-600 hover:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-800'}`}>{builderCategories.includes(item) ? `Builder · ${item}` : item}</button>)}</nav></aside>
+        <main className="min-w-0" aria-label="Settings options"><h2 className="text-lg font-semibold">{search ? 'Search results' : category}</h2><p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">Preferences save automatically. Builder server and runtime changes use Save changes.</p>
+          {visible.length === 0 && <p className="py-10 text-sm text-zinc-600 dark:text-zinc-400">No settings match “{query}”. Try a different name or enable Builder mode for advanced controls.</p>}
+          {visible.map(option => <div key={`${option.category}-${option.title}`}>{search && <p className="mt-5 text-xs text-zinc-600 dark:text-zinc-400">{option.category}</p>}<SettingsRow title={option.title} description={option.description}>{option.control}</SettingsRow></div>)}
+          {(category === 'Keybindings' || search) && <div className="mt-5"><p className="mb-3 text-xs text-zinc-600 dark:text-zinc-400">Shortcuts use Command on macOS and Control elsewhere. Some combinations may be reserved by your operating system.</p><button type="button" className={controlClass} onClick={() => { prefs.resetKeybindings(); setCapture(null); setShortcutError(''); }}>Reset keybindings</button></div>}
+          {shortcutError && <p role="alert" className="mt-4 text-sm text-red-700 dark:text-red-300">{shortcutError}</p>}
+          {prefs.builderMode && (builderCategories.includes(category) || dirty || search) && <div className="mt-6 flex flex-wrap items-center gap-3"><button type="button" disabled={saving || !dirty} className={`${controlClass} font-medium`} onClick={() => void save()}>{saving ? 'Saving…' : 'Save changes'}</button>{dirty && <span className="text-xs text-zinc-600 dark:text-zinc-400">Unsaved server/runtime changes</span>}</div>}
+          {error && <p role="alert" className="mt-4 text-sm text-red-700 dark:text-red-300">{error}</p>}<p role="status" className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">{message}</p>
+        </main>
       </div>
-
-      <form onSubmit={handleSave} className="space-y-6">
-        {/* Appearance & Theme Selector */}
-        <div className="p-6 rounded-xl bg-white dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] space-y-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-[#111111] dark:text-[#F5F5F5] flex items-center gap-2">
-                <Sun className="w-4 h-4 text-amber-500" />
-                Appearance & Theme
-              </h3>
-              <p className="text-xs text-zinc-500 dark:text-[#A1A1AA] mt-0.5">
-                Customize your interface with high-contrast Dark theme or clean White theme.
-              </p>
-            </div>
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-zinc-100 dark:bg-[#191919] text-zinc-900 dark:text-[#F5F5F5] border border-zinc-200 dark:border-[#262626] uppercase">
-              {theme} mode
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
-            {/* Dark Theme Option */}
-            <button
-              type="button"
-              onClick={() => setThemePreference('dark')}
-              className={`p-4 rounded-lg border text-left transition-all flex items-start gap-3.5 ${
-                themePreference === 'dark'
-                  ? 'border-black dark:border-white bg-zinc-50 dark:bg-[#202020] ring-1 ring-black/20 dark:ring-white/20'
-                  : 'border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#141414] hover:border-zinc-400 dark:hover:border-[#737373]'
-              }`}
-            >
-              <div className="p-2 rounded bg-zinc-100 dark:bg-[#191919] border border-zinc-200 dark:border-[#262626] text-zinc-900 dark:text-[#F5F5F5] shrink-0">
-                <Moon className="w-4 h-4 text-zinc-900 dark:text-[#F5F5F5]" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-[#111111] dark:text-[#F5F5F5]">Dark Theme</span>
-                  {themePreference === 'dark' && <Check className="w-3.5 h-3.5 text-black dark:text-white" />}
-                </div>
-                <p className="text-[11px] text-zinc-500 dark:text-[#A1A1AA] leading-tight">
-                  High-contrast dark palette (#090909) designed for low-light environments.
-                </p>
-              </div>
-            </button>
-
-            {/* White / Light Theme Option */}
-            <button
-              type="button"
-              onClick={() => setThemePreference('light')}
-              className={`p-4 rounded-lg border text-left transition-all flex items-start gap-3.5 ${
-                themePreference === 'light'
-                  ? 'border-black dark:border-white bg-zinc-50 dark:bg-[#202020] ring-1 ring-black/20 dark:ring-white/20'
-                  : 'border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#141414] hover:border-zinc-400 dark:hover:border-[#737373]'
-              }`}
-            >
-              <div className="p-2 rounded bg-zinc-100 dark:bg-[#191919] border border-zinc-200 dark:border-[#262626] text-zinc-900 dark:text-[#F5F5F5] shrink-0">
-                <Sun className="w-4 h-4 text-amber-500" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-[#111111] dark:text-[#F5F5F5]">Clean White Theme</span>
-                  {themePreference === 'light' && <Check className="w-3.5 h-3.5 text-black dark:text-white" />}
-                </div>
-                <p className="text-[11px] text-zinc-500 dark:text-[#A1A1AA] leading-tight">
-                  Crisp pure white surfaces with minimalist monochrome design.
-                </p>
-              </div>
-            </button>
-
-            {/* System / Auto Option */}
-            <button
-              type="button"
-              onClick={() => setThemePreference('system')}
-              className={`p-4 rounded-lg border text-left transition-all flex items-start gap-3.5 ${
-                themePreference === 'system'
-                  ? 'border-black dark:border-white bg-zinc-50 dark:bg-[#202020] ring-1 ring-black/20 dark:ring-white/20'
-                  : 'border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#141414] hover:border-zinc-400 dark:hover:border-[#737373]'
-              }`}
-            >
-              <div className="p-2 rounded bg-zinc-100 dark:bg-[#191919] border border-zinc-200 dark:border-[#262626] text-zinc-900 dark:text-[#F5F5F5] shrink-0">
-                <Laptop className="w-4 h-4 text-zinc-900 dark:text-[#F5F5F5]" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-[#111111] dark:text-[#F5F5F5]">System (Auto)</span>
-                  {themePreference === 'system' && <Check className="w-3.5 h-3.5 text-black dark:text-white" />}
-                </div>
-                <p className="text-[11px] text-zinc-500 dark:text-[#A1A1AA] leading-tight">
-                  Automatically sync appearance with your macOS / system dark mode.
-                </p>
-              </div>
-            </button>
-          </div>
-        </div>
-
-        {/* 1. Low-Memory Layer Streaming Mode Card */}
-        <div className="p-6 rounded-xl bg-white dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] space-y-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-zinc-900 dark:text-[#F5F5F5]" />
-                <h3 className="text-sm font-bold text-[#111111] dark:text-[#F5F5F5]">Low-Memory Layer Streaming Mode</h3>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-medium ${
-                  lowMemoryMode ? 'bg-black dark:bg-white text-white dark:text-black border border-black dark:border-white' : 'bg-zinc-100 dark:bg-[#191919] text-zinc-600 dark:text-[#A1A1AA]'
-                }`}>
-                  {lowMemoryMode ? 'ACTIVE' : 'STANDARD'}
-                </span>
-              </div>
-              <p className="text-xs text-zinc-500 dark:text-[#A1A1AA] leading-relaxed max-w-xl">
-                Enables 8-bit quantized key-value tensor caching (<code className="font-mono text-zinc-700 dark:text-[#F5F5F5]">-ctk q8_0 -ctv q8_0</code>) and Flash Attention. Allows running larger <strong>7B, 8B, 12B, and 14B models</strong> on machines with low physical RAM (e.g. 8GB RAM) with minimal memory footprint.
-              </p>
-            </div>
-
-            <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
-              <input
-                type="checkbox"
-                checked={lowMemoryMode}
-                onChange={(e) => setLowMemoryMode(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-zinc-200 dark:bg-[#262626] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black dark:peer-checked:bg-white"></div>
-            </label>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs font-mono">
-            <div className="p-3 rounded-lg bg-zinc-50 dark:bg-[#191919] border border-[#eaeaea] dark:border-[#262626] space-y-1">
-              <span className="text-zinc-500 dark:text-[#737373] text-[10px] block">ACTIVE RAM SAVINGS</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">~60% to 70% Less Working RAM</span>
-              <p className="text-[11px] text-zinc-500 dark:text-[#A1A1AA] font-sans mt-0.5">
-                Sequential forward pass reads layer weights on-demand from disk.
-              </p>
-            </div>
-
-            <div className="p-3 rounded-lg bg-zinc-50 dark:bg-[#191919] border border-[#eaeaea] dark:border-[#262626] space-y-1">
-              <span className="text-zinc-500 dark:text-[#737373] text-[10px] block">SPEED CHARACTERISTICS</span>
-              <span className="text-zinc-800 dark:text-[#F5F5F5] font-semibold">Fast on NVMe / Apple Unified Memory</span>
-              <p className="text-[11px] text-zinc-500 dark:text-[#A1A1AA] font-sans mt-0.5">
-                Yields 8–25+ tok/s while preventing out-of-memory crashes.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* 2. Compute & Acceleration */}
-        <div className="p-6 rounded-lg bg-white dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] space-y-4">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-700 dark:text-[#A1A1AA] flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5 text-amber-500" />
-            Compute & Hardware Acceleration
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs text-zinc-700 dark:text-[#A1A1AA] font-medium">GPU Offload Layers</label>
-              <input
-                type="number"
-                min="0"
-                max="999"
-                value={gpuLayers}
-                onChange={(e) => setGpuLayers(parseInt(e.target.value, 10))}
-                className="w-full bg-zinc-50 dark:bg-[#191919] border border-[#eaeaea] dark:border-[#262626] rounded px-3 py-2 text-xs font-mono text-[#111111] dark:text-[#F5F5F5] focus:outline-none focus:border-black dark:focus:border-white"
-              />
-              <span className="text-[11px] text-zinc-500">99 = Offload all layers to GPU</span>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-zinc-700 dark:text-[#A1A1AA] font-medium">CPU Threads</label>
-              <input
-                type="number"
-                min="1"
-                max="64"
-                value={threads}
-                onChange={(e) => setThreads(parseInt(e.target.value, 10))}
-                className="w-full bg-zinc-50 dark:bg-[#191919] border border-[#eaeaea] dark:border-[#262626] rounded px-3 py-2 text-xs font-mono text-[#111111] dark:text-[#F5F5F5] focus:outline-none focus:border-black dark:focus:border-white"
-              />
-              <span className="text-[11px] text-zinc-500">Physical cores allocation</span>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-zinc-700 dark:text-[#A1A1AA] font-medium">Default Context Limit</label>
-              <input
-                type="number"
-                min="512"
-                max="131072"
-                step="512"
-                value={contextLimit}
-                onChange={(e) => setContextLimit(parseInt(e.target.value, 10))}
-                className="w-full bg-zinc-50 dark:bg-[#191919] border border-[#eaeaea] dark:border-[#262626] rounded px-3 py-2 text-xs font-mono text-[#111111] dark:text-[#F5F5F5] focus:outline-none focus:border-black dark:focus:border-white"
-              />
-              <span className="text-[11px] text-zinc-500">Tokens in context window</span>
-            </div>
-          </div>
-
-          {/* Flash Attention Toggle */}
-          <div className="pt-2 border-t border-[#eaeaea] dark:border-[#222222] flex items-center justify-between">
-            <div className="space-y-0.5">
-              <div className="text-xs font-semibold text-[#111111] dark:text-[#F5F5F5] flex items-center gap-1.5">
-                <Zap className="w-3 h-3 text-amber-500" />
-                Flash Attention Kernel
-              </div>
-              <p className="text-[11px] text-zinc-500 dark:text-[#A1A1AA]">
-                Reduces KV cache memory footprint by 50% using optimized tiled matrix kernels.
-              </p>
-            </div>
-            <input
-              type="checkbox"
-              checked={flashAttention}
-              onChange={(e) => setFlashAttention(e.target.checked)}
-              className="rounded border-[#eaeaea] dark:border-[#262626] bg-white dark:bg-[#191919] accent-black dark:accent-white"
-            />
-          </div>
-        </div>
-
-        {/* 3. Network & Concurrency */}
-        <div className="p-6 rounded-lg bg-white dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] space-y-4">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-700 dark:text-[#A1A1AA]">Networking & Queue</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs text-zinc-700 dark:text-[#A1A1AA] font-medium">Server Port</label>
-              <input
-                type="number"
-                min="1024"
-                max="65535"
-                value={port}
-                onChange={(e) => setPort(parseInt(e.target.value, 10))}
-                className="w-full bg-zinc-50 dark:bg-[#191919] border border-[#eaeaea] dark:border-[#262626] rounded px-3 py-2 text-xs font-mono text-[#111111] dark:text-[#F5F5F5] focus:outline-none focus:border-black dark:focus:border-white"
-              />
-              <span className="text-[11px] text-zinc-500">Default: 8080 (Inference API: /v1)</span>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs text-zinc-700 dark:text-[#A1A1AA] font-medium">Max Concurrent Requests</label>
-              <input
-                type="number"
-                min="1"
-                max="32"
-                value={maxConcurrency}
-                onChange={(e) => setMaxConcurrency(parseInt(e.target.value, 10))}
-                className="w-full bg-zinc-50 dark:bg-[#191919] border border-[#eaeaea] dark:border-[#262626] rounded px-3 py-2 text-xs font-mono text-[#111111] dark:text-[#F5F5F5] focus:outline-none focus:border-black dark:focus:border-white"
-              />
-              <span className="text-[11px] text-zinc-500">Limits concurrency to prevent memory spikes</span>
-            </div>
-          </div>
-        </div>
-
-        {/* 4. File Storage Paths */}
-        <div className="p-6 rounded-lg bg-white dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] space-y-4">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-700 dark:text-[#A1A1AA] flex items-center gap-1.5">
-            <HardDrive className="w-3.5 h-3.5 text-zinc-900 dark:text-zinc-100" />
-            File Storage Locations
-          </h3>
-
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <label className="text-xs text-zinc-700 dark:text-[#A1A1AA] font-medium">Models Storage Directory</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={modelsDir}
-                  onChange={(e) => setModelsDir(e.target.value)}
-                  className="flex-1 bg-zinc-50 dark:bg-[#191919] border border-[#eaeaea] dark:border-[#262626] rounded px-3 py-2 text-xs font-mono text-[#111111] dark:text-[#F5F5F5] focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={handleSelectModelsDir}
-                  className="px-3 py-2 bg-zinc-100 dark:bg-[#191919] hover:bg-zinc-200 dark:hover:bg-[#202020] border border-zinc-200 dark:border-[#262626] rounded text-xs text-zinc-700 dark:text-[#F5F5F5] flex items-center gap-1.5 transition-colors"
-                >
-                  <Folder className="w-3.5 h-3.5" />
-                  <span>Browse</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-zinc-700 dark:text-[#A1A1AA] font-medium">Runtime Binaries Directory</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={runtimeDir}
-                  onChange={(e) => setRuntimeDir(e.target.value)}
-                  className="flex-1 bg-zinc-50 dark:bg-[#191919] border border-[#eaeaea] dark:border-[#262626] rounded px-3 py-2 text-xs font-mono text-[#111111] dark:text-[#F5F5F5] focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={handleSelectRuntimeDir}
-                  className="px-3 py-2 bg-zinc-100 dark:bg-[#191919] hover:bg-zinc-200 dark:hover:bg-[#202020] border border-zinc-200 dark:border-[#262626] rounded text-xs text-zinc-700 dark:text-[#F5F5F5] flex items-center gap-1.5 transition-colors"
-                >
-                  <Folder className="w-3.5 h-3.5" />
-                  <span>Browse</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </form>
     </div>
-  );
-};
+  </div>;
+}
