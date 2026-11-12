@@ -1,0 +1,67 @@
+/*
+ * Zaylo bundled interface typography.
+ *
+ * Fonts are bundled locally (see ./fonts/ with their SIL OFL 1.1 licenses):
+ *  - Manrope (variable, wght 200-800) for interface and chat text.
+ *  - JetBrains Mono (variable, wght 100-800) for code.
+ * No runtime font network requests are made; families resolve from these
+ * local files only.
+ */
+
+@font-face {
+  font-family: 'Manrope';
+  src: url('./fonts/Manrope-Variable-latin.woff2') format('woff2-variations');
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./fonts/JetBrainsMono-Variable-latin.woff2') format('woff2-variations');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Interface and chat text. Keeps readable system fallbacks. */
+  --font-interface: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, Helvetica, Arial, sans-serif;
+  /* Code blocks and inline code. */
+  --font-code: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  /*
+   * Adjustable text size (px, 12-24) driven from workspace preferences
+   * via --zaylo-text-size on :root. UI chrome scales around it; chat
+   * text also scales. Cap long-line reading comfort.
+   */
+  --zaylo-text-size: 16px;
+  --zaylo-text-scale: calc(var(--zaylo-text-size) / 16px);
+}
+
+body {
+  font-family: var(--font-interface);
+}
+
+/* Code surfaces use the bundled mono font (code blocks + Tailwind font-mono). */
+pre,
+code,
+kbd,
+samp,
+.font-mono,
+textarea.font-mono {
+  font-family: var(--font-code);
+  font-variant-ligatures: none;
+}
+
+/*
+ * Preference-driven text sizing. Applied as a root multiplier so future
+ * token-driven surfaces can scale off --zaylo-text-scale without JS.
+ * Chat/message text containers marked .zaylo-chat-text scale too.
+ */
+.zaylo-chat-text {
+  font-size: calc(1rem * var(--zaylo-text-scale));
+  line-height: calc(1.625 * var(--zaylo-text-scale));
+}
