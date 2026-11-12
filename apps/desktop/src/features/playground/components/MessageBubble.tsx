@@ -30,7 +30,7 @@ interface MessageBubbleProps {
   onRegenerate?: () => void;
   onRetry?: () => void;
   onOpenPresentationStudio?: (spec: PresentationSpec) => void;
-  onSaveToMemory?: (text: string) => void;
+  onSaveToMemory?: (text: string) => void | Promise<void>;
 }
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({
@@ -54,6 +54,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     return () => { speech.removeEventListener('voiceschanged', refresh); if (utterance.current) { utterance.current.onend = null; utterance.current.onerror = null; speech.cancel(); } };
   }, []);
   const [copied, setCopied] = useState(false);
+  const [savingMemory, setSavingMemory] = useState(false);
   const [savedMem, setSavedMem] = useState(false);
   const [feedback, setFeedback] = useState<'liked' | 'disliked' | null>(null);
   const [generatedDeck, setGeneratedDeck] = useState<PresentationSpec | null>(null);
@@ -254,13 +255,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
             {onSaveToMemory && (
               <button
-                onClick={() => {
-                  onSaveToMemory(rawText);
-                  setSavedMem(true);
-                  setTimeout(() => setSavedMem(false), 2000);
+                disabled={savingMemory}
+                onClick={async () => {
+                  setSavingMemory(true); setActionError('');
+                  try {
+                    await onSaveToMemory(rawText);
+                    setSavedMem(true); setTimeout(() => setSavedMem(false), 2000);
+                  } catch (error) { setActionError(error instanceof Error ? error.message : 'Could not save this memory. Try again.'); }
+                  finally { setSavingMemory(false); }
                 }}
                 className="p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-[#202020] text-zinc-400 dark:text-[#A1A1AA] hover:text-zinc-800 dark:hover:text-[#F5F5F5] transition-colors"
-                title="Save to LoftyDB Memory"
+                title={savingMemory ? 'Saving memory…' : 'Save to memory'}
               >
                 {savedMem ? (
                   <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
