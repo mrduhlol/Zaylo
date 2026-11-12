@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { ArchivedChats } from './ArchivedChats';
 import { useAppStore } from '../../stores/useAppStore';
 
 export const LibraryView: React.FC = () => {
   const { ragDocuments, imageHistory, fetchRagDocuments, fetchImageHistory, saveImageAs, openImageFolder } = useAppStore();
-  const [section, setSection] = useState<'documents' | 'images'>('documents');
+  const [section, setSection] = useState<'documents' | 'images' | 'archive'>('documents');
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -25,9 +26,11 @@ export const LibraryView: React.FC = () => {
         <div className="flex gap-2" role="group" aria-label="Library category">
           <button aria-pressed={section === 'documents'} onClick={() => setSection('documents')} className="rounded-lg px-3 py-2 bg-[var(--card)] zaylo-glow-hover">Documents ({ragDocuments.length})</button>
           <button aria-pressed={section === 'images'} onClick={() => setSection('images')} className="rounded-lg px-3 py-2 bg-[var(--card)] zaylo-glow-hover">Images ({imageHistory.length})</button>
+          <button aria-pressed={section === 'archive'} onClick={() => setSection('archive')} className="rounded-lg px-3 py-2 bg-[var(--card)] zaylo-glow-hover">Archived chats</button>
         </div>
         <input aria-label="Search library" placeholder="Search library" value={query} onChange={event => setQuery(event.target.value)} className="rounded-lg p-2 border border-current/20 bg-[var(--card)]" />
       </div>
+      {section === 'archive' && <ArchivedChats />}
       {error && <p role="alert">{error}</p>}
       {loading && <p role="status">Loading local library…</p>}
       {!loading && section === 'documents' && <div>
