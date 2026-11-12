@@ -80,7 +80,7 @@ export const App: React.FC = () => {
     startupApplied.current = true;
     const state = useAppStore.getState();
     if (useWorkspacePreferences.getState().startupBehavior === 'new-chat') {
-      const empty = state.conversations.find(chat => !chat.messages.some(message => message.role === 'user'));
+      const empty = state.conversations.find(chat => !chat.archivedAt && !chat.temporary && !chat.messages.some(message => message.role === 'user'));
       if (empty) state.selectChat(empty.id);
       else state.createNewChat();
     }
