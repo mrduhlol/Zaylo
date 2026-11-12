@@ -86,7 +86,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
     conversations,
     activeConvId,
     setConversations,
-    setActiveConvId,
+    selectChat,
     createNewChat,
     deleteChat,
     renameChat,
@@ -287,12 +287,10 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
       }
     }
 
-    if (!selectedModelId) {
-      const loaded = unifiedModels.find((m) => m.isLoaded);
-      const initial = loaded || unifiedModels[0];
-      setSelectedModelId(initial.id);
-      setSelectedModel(initial.name);
-    }
+    const initial = unifiedModels.find(model => model.isLoaded && !model.isImageModel)
+      || unifiedModels.find(model => !model.isImageModel);
+    setSelectedModelId(initial?.id || '');
+    if (initial) setSelectedModel(initial.name);
   }, [selectedModel, unifiedModels, selectedModelId, setSelectedModel]);
 
   // Current active conversation
@@ -307,7 +305,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
   const persistPrivateConversation = (conversation: Parameters<typeof persistConversationToLoftyDb>[0]) => {
     if (maySaveMemory(conversation as ChatPrivacy)) return persistConversationToLoftyDb(conversation);
   };
-  const activeModel = unifiedModels.find((m) => m.id === selectedModelId) || unifiedModels[0];
+  const activeModel = unifiedModels.find((m) => m.id === selectedModelId);
 
   useEffect(() => {
     const ids = new Set(conversations.map(c => c.id));
@@ -403,6 +401,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
 
   // Handle Image Generation
   const handleGenerateImage = async (params: ImageGenerationParams) => {
+    if (!activeModel) return;
     try {
       await generateImage({
         modelId: activeModel.rawInstallation?.modelId || activeModel.id,
@@ -451,10 +450,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
   const handleSelectConversation = (id: string) => {
     const conv = conversations.find((c) => c.id === id);
     if (conv) {
-      setActiveConvId(id);
-      if (conv.modelId && unifiedModels.some((m) => m.id === conv.modelId)) {
-        setSelectedModelId(conv.modelId);
-      }
+      selectChat(id);
       if (conv.personaId) {
         setActivePersonaId(conv.personaId);
       }
