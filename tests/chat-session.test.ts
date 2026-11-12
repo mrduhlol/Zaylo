@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { chatDrafts, mayRecallMemory, maySaveMemory, nextBackground } from '../apps/desktop/src/features/playground/hooks/chatSession';
+import { chatDrafts, hasUserPrompt, mayRecallMemory, maySaveMemory, nextBackground } from '../apps/desktop/src/features/playground/hooks/chatSession';
 
 afterEach(() => chatDrafts.clear());
 
@@ -44,4 +44,15 @@ describe('new conversation background selection', () => {
     }
   });
   it('supports a single available source', () => expect(nextBackground(1, 0)).toBe(0));
+});
+
+
+describe('new-chat greeting boundary', () => {
+  it('keeps persona greetings in the new-chat presentation until a user prompt exists', () => {
+    expect(hasUserPrompt(undefined)).toBe(false);
+    expect(hasUserPrompt([])).toBe(false);
+    const greeting = [{ role: 'assistant', content: 'Hello! How can I help?' }];
+    expect(hasUserPrompt(greeting)).toBe(false);
+    expect(hasUserPrompt([...greeting, { role: 'user', content: 'Plan my day' }])).toBe(true);
+  });
 });
