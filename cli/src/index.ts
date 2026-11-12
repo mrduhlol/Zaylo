@@ -16,7 +16,7 @@ const program = new Command();
 program
   .name('zaylo')
   .description('Zaylo AI Server Platform CLI — Turn your computer into a private AI inference server')
-  .version('3.2.0');
+  .version('4.0.0');
 
 async function initCore() {
   const dbConn = await createDatabaseAsync(getDefaultDatabasePath());
