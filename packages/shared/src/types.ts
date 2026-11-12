@@ -382,6 +382,8 @@ export interface ChatCompletionRequest {
   rag?: boolean;
   ragDocumentIds?: string[];
   memory?: boolean;
+  /** Independently controls extraction; omitted preserves legacy memory behavior. */
+  memorySave?: boolean;
   memoryScope?: 'all' | 'global' | 'persona' | 'conversation';
   conversationId?: string;
   personaId?: string;
