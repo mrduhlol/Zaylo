@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import * as Select from '@radix-ui/react-select';
+import { Check, ChevronDown } from 'lucide-react';
 import { useWorkspacePreferences } from '../../../stores/useWorkspacePreferences';
 import {
   Box,
@@ -94,15 +96,19 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
       <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         {/* Model Selector Pill */}
         <div className="relative inline-block" ref={modelDropdownRef}>
-          <label className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs text-[var(--foreground)]">
-            <Box className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
-            <select aria-label="AI model" value={selectedModel?.id || ''} disabled={isLoadingModel || models.length === 0}
-              onChange={(event) => onSelectModel(event.target.value)}
-              className="max-w-[120px] sm:max-w-[220px] bg-[var(--card)] text-[var(--foreground)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]">
-              {models.length === 0 && <option value="">No models installed</option>}
-              {models.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
-            </select>
-          </label>
+          <Select.Root value={selectedModel?.id || ''} onValueChange={onSelectModel} disabled={isLoadingModel || models.length === 0}>
+            <Select.Trigger aria-label="AI model" className="flex max-w-[160px] sm:max-w-[260px] items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs text-[var(--foreground)] hover:bg-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] disabled:opacity-60">
+              <Box className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" />
+              <span className="truncate"><Select.Value placeholder={models.length ? 'Select model' : 'No models installed'} /></span>
+              <Select.Icon><ChevronDown className="h-3.5 w-3.5" /></Select.Icon>
+            </Select.Trigger>
+            <Select.Portal><Select.Content position="popper" sideOffset={6} collisionPadding={12} className="z-50 max-h-[var(--radix-select-content-available-height)] max-w-[calc(100vw-24px)] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--popover)] p-1 text-xs text-[var(--popover-foreground)] shadow-lg">
+              <Select.Viewport className="max-h-72 overflow-y-auto">{models.map(model => <Select.Item key={model.id} value={model.id} className="relative cursor-default rounded-lg py-2 pl-8 pr-4 outline-none data-[highlighted]:bg-[var(--accent)]">
+                <Select.ItemIndicator className="absolute left-2 top-2"><Check className="h-4 w-4" /></Select.ItemIndicator>
+                <Select.ItemText>{model.name}</Select.ItemText>
+              </Select.Item>)}</Select.Viewport>
+            </Select.Content></Select.Portal>
+          </Select.Root>
         </div>
 
         {/* Persona Selector Pill */}
