@@ -401,7 +401,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
 
   // Handle Image Generation
   const handleGenerateImage = async (params: ImageGenerationParams) => {
-    if (!activeModel) return;
+    if (!activeModel || activeConv?.temporary) return;
     try {
       await generateImage({
         modelId: activeModel.rawInstallation?.modelId || activeModel.id,
@@ -935,7 +935,13 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
         </div>}
 
         {/* Workspace Canvas: Normal Conversation Area, Comparative View, or Image Generation Canvas */}
-        {activeModel?.isImageModel ? (
+        {activeModel?.isImageModel && activeConv?.temporary ? (
+          <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-auto px-6 py-10 text-center">
+            <h1 className="text-xl font-semibold text-[var(--foreground)]">Images need a saved chat</h1>
+            <p className="max-w-md text-sm leading-relaxed text-[var(--muted-foreground)]">Generated images are stored in your local Library. Choose a text model above to keep chatting temporarily, or start a saved chat to create images.</p>
+            <button type="button" className="zaylo-glow-hover rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm text-[var(--foreground)] focus-visible:outline focus-visible:outline-[var(--theme-accent)]" onClick={() => createNewChat()}>Start a saved chat</button>
+          </div>
+        ) : activeModel?.isImageModel ? (
           <>
             <ImagePlaygroundArea
               images={imageHistory}
