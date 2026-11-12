@@ -1,3 +1,4 @@
+import { themeArtwork } from '../../theme/artwork';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Play,
@@ -94,7 +95,8 @@ export const Sidebar: React.FC = () => {
   const { projects, selectProject } = useProjects();
   const [menuSection, setMenuSection] = useState<'project' | 'branch' | null>(null);
   const [notice, setNotice] = useState('');
-  const { builderMode, collapsedSections, toggleSection } = useWorkspacePreferences();
+  const { builderMode, collapsedSections, toggleSection, themeFamily } = useWorkspacePreferences();
+  const headerArtwork = themeArtwork[themeFamily];
 
   const [searchQuery, setSearchQuery] = useState('');
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
@@ -431,10 +433,16 @@ export const Sidebar: React.FC = () => {
             <div className="h-7 shrink-0 w-full [-webkit-app-region:drag]" />
 
             {/* Brand Header */}
-            <div className="px-4 pb-3 pt-1 flex items-center justify-between">
-              <div
+            <div className="relative isolate px-4 pb-5 pt-1 flex items-center justify-between">
+              <div aria-hidden="true" className="pointer-events-none absolute -top-7 inset-x-0 -bottom-3 -z-10" style={{
+                backgroundImage: `url("${headerArtwork.src}")`, backgroundSize: 'cover', backgroundPosition: 'center 44%',
+                filter: headerArtwork.filter, opacity: .45,
+                maskImage: 'linear-gradient(to bottom, black 15%, rgba(0,0,0,.85) 48%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(to bottom, black 15%, rgba(0,0,0,.85) 48%, transparent 100%)',
+              }} />
+              <button type="button"
                 onClick={() => setActiveTab('playground')}
-                className="flex items-center gap-2.5 cursor-pointer group"
+                className="flex items-center gap-2.5 cursor-pointer group rounded-md focus-visible:outline focus-visible:outline-[var(--theme-accent)]"
                 title="Zaylo AI Studio"
               >
                 <div className="w-7 h-7 rounded-lg bg-black dark:bg-white text-white dark:text-black flex items-center justify-center font-bold text-sm tracking-tight shadow-sm shrink-0 transition-transform group-hover:scale-105">
@@ -443,7 +451,7 @@ export const Sidebar: React.FC = () => {
                 <span className="font-semibold text-base text-[#111111] dark:text-[#F5F5F5] tracking-tight">
                   Zaylo
                 </span>
-              </div>
+              </button>
 
               <button
                 onClick={toggleSidebar}
