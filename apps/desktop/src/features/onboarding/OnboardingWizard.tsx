@@ -1,411 +1,110 @@
-import React, { useState } from 'react';
-import {
-  Sparkles,
-  Cpu,
-  HardDrive,
-  Zap,
-  Download,
-  CheckCircle2,
-  Wifi,
-  X,
-  FolderOpen,
-} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { CheckCircle2, Download, FolderOpen, X } from 'lucide-react';
 import { useAppStore } from '../../stores/useAppStore';
+import { api } from '../../api/client';
+import { controlClass } from '../settings/SettingsControls';
+import type { ModelInstallation } from '@local-ai/shared';
 
-export const OnboardingWizard: React.FC = () => {
-  const {
-    showOnboarding,
-    setShowOnboarding,
-    hardware,
-    capabilities,
-    availableModels,
-    downloadModel,
-    importLocalModel,
-    startServer,
-    updateServerConfig,
-    setActiveTab,
-  } = useAppStore();
+const completionKey = 'zaylo:onboarding:v4';
+const size = (bytes: number) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.ceil(bytes / 1024 ** 2)} MB`;
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
-  const [selectedModelId, setSelectedModelId] = useState<string>('smollm2-135m-instruct');
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [enableLan, setEnableLan] = useState(false);
-  const [isStartingServer, setIsStartingServer] = useState(false);
-
-  if (!showOnboarding) return null;
-
-  const handleDownloadAndStart = async () => {
-    setIsDownloading(true);
-    try {
-      const model = availableModels.find((m) => m.id === selectedModelId) || availableModels[0];
-      const variant = model.variants[0];
-
-      await downloadModel(model.id, variant.id, variant.downloadUrl, model.name);
-      setStep(5);
-    } catch (err: any) {
-      alert(`Setup error: ${err.message}`);
-    } finally {
-      setIsDownloading(false);
-    }
+export function OnboardingWizard() {
+  const app = useAppStore();
+  const [step, setStep] = useState<'welcome' | 'model' | 'ready'>('welcome');
+  const [selected, setSelected] = useState('');
+  const [installation, setInstallation] = useState<ModelInstallation>();
+  const [downloadId, setDownloadId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const alive = useRef(true);
+  const operation = useRef(0);
+  useEffect(() => {
+    alive.current = true;
+    let disposed = false;
+    // Probe the installed catalog directly: an initial empty store is not proof
+    // that this is a new installation. A failed probe must never erase user data.
+    void api.invoke('models:list-installed', undefined).then(models => {
+      if (disposed) return;
+      if (!models.length && !localStorage.getItem(completionKey)) useAppStore.getState().setShowOnboarding(true);
+    }).catch(() => {});
+    return () => { disposed = true; alive.current = false; operation.current++; };
+  }, []);
+  const budget = app.capabilities?.memoryBudgetBytes || (app.hardware ? app.hardware.memory.availableBytes * .6 : 0);
+  const candidates = useMemo(() => app.availableModels.flatMap(model =>
+    model.variants.filter(variant => variant.format === 'gguf' && !!variant.downloadUrl && (!model.taskType || model.taskType === 'text-generation'))
+      .map(variant => ({ model, variant })))
+    .sort((a, b) => a.variant.sizeBytes - b.variant.sizeBytes), [app.availableModels]);
+  const fitting = candidates.filter(candidate => !budget || candidate.variant.estimatedRAMBytes <= budget);
+  const recommendation = fitting.find(candidate => candidate.variant.sizeBytes >= 300 * 1024 ** 2) || fitting[0] || candidates[0];
+  const shown = [...new Map([recommendation, ...fitting.slice(0, 4), ...candidates.slice(0, 2)].filter(Boolean).map(candidate => [candidate.variant.id, candidate])).values()].slice(0, 5);
+  const choice = candidates.find(candidate => `${candidate.model.id}:${candidate.variant.id}` === selected) || recommendation;
+  const download = app.downloads[downloadId];
+  useEffect(() => {
+    if (!downloadId || !choice) return;
+    const installed = app.installedModels.find(model => model.modelId === choice.model.id && model.variantId === choice.variant.id);
+    if (installed) { setInstallation(installed); setStep('ready'); setDownloadId(''); }
+  }, [app.installedModels, downloadId, choice]);
+  const pending = !!downloadId && (!download || ['pending', 'downloading', 'paused', 'completed'].includes(download.status));
+  const dismiss = () => {
+    if (busy) return;
+    localStorage.setItem(completionKey, 'dismissed'); app.setShowOnboarding(false);
   };
-
-  const handleSelectLocalFile = async () => {
+  const beginDownload = async () => {
+    if (!choice || pending) return;
+    setError(''); setBusy(true);
+    setSelected(`${choice.model.id}:${choice.variant.id}`);
+    const id = ++operation.current;
     try {
-      const result = await importLocalModel();
-      if (result) {
-        setStep(5);
-      }
-    } catch (err: any) {
-      alert(`Import error: ${err.message}`);
-    }
+      const queued = await app.downloadModel(choice.model.id, choice.variant.id, choice.variant.downloadUrl, choice.model.name);
+      if (alive.current && id === operation.current) setDownloadId(queued);
+    } catch (cause) { if (alive.current) setError(cause instanceof Error ? cause.message : 'Could not start the download.'); }
+    finally { if (alive.current) setBusy(false); }
   };
-
-  const handleCompleteSetup = async () => {
-    setIsStartingServer(true);
+  const cancelDownload = async () => {
+    setBusy(true); setError('');
     try {
-      if (enableLan) {
-        await updateServerConfig({ lanEnabled: true });
-      }
-      await startServer();
-      setShowOnboarding(false);
-      setActiveTab('playground');
-    } catch (err: any) {
-      alert(`Server start error: ${err.message}`);
-      setShowOnboarding(false);
-    } finally {
-      setIsStartingServer(false);
-    }
+      // Use the throwing IPC call; cancellation failures must remain visible.
+      await api.invoke('models:cancel-download', { downloadId });
+      app.removeDownload(downloadId); setDownloadId('');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not cancel the download.'); }
+    finally { setBusy(false); }
   };
-
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-[#111317] border border-[#262a34] rounded-xl p-8 space-y-6 shadow-2xl relative">
-        <button
-          onClick={() => setShowOnboarding(false)}
-          className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
-        {/* Step Indicator */}
-        <div className="flex items-center justify-between text-xs font-mono text-zinc-500 border-b border-[#1c1f26] pb-3">
-          <span>STEP {step} OF 6</span>
-          <div className="flex gap-1.5">
-            {[1, 2, 3, 4, 5, 6].map((s) => (
-              <div
-                key={s}
-                className={`h-1.5 rounded-full transition-all ${
-                  s === step ? 'w-6 bg-black dark:bg-white' : s < step ? 'w-2 bg-emerald-500' : 'w-2 bg-zinc-700'
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* STEP 1: WELCOME */}
-        {step === 1 && (
-          <div className="space-y-4 text-center py-4">
-            <div className="w-12 h-12 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center text-zinc-900 dark:text-zinc-100 mx-auto">
-              <Sparkles className="w-6 h-6" />
-            </div>
-            <h2 className="text-xl font-bold text-zinc-100">Welcome to Zaylo</h2>
-            <p className="text-xs text-zinc-400 max-w-md mx-auto leading-relaxed">
-              Convert this computer into a high-performance, private OpenAI-compatible AI inference server accessible from any device on your local network.
-            </p>
-            <div className="pt-4">
-              <button
-                onClick={() => setStep(2)}
-                className="px-6 py-2.5 rounded-md bg-black dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-black text-xs font-medium transition-colors"
-              >
-                Scan Hardware & Setup →
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 2: HARDWARE DETECTION */}
-        {step === 2 && (
-          <div className="space-y-5">
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-100">Hardware Detection</h3>
-              <p className="text-xs text-zinc-400 mt-0.5">Real host hardware specifications detected:</p>
-            </div>
-
-            <div className="space-y-3 font-mono text-xs">
-              <div className="p-3 rounded bg-[#0d0f12] border border-[#1d2027] flex items-center justify-between">
-                <span className="text-zinc-400 flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-zinc-900 dark:text-zinc-100" />
-                  CPU
-                </span>
-                <span className="text-zinc-200">
-                  {hardware?.cpu.model} ({hardware?.cpu.physicalCores} Cores)
-                </span>
-              </div>
-
-              <div className="p-3 rounded bg-[#0d0f12] border border-[#1d2027] flex items-center justify-between">
-                <span className="text-zinc-400 flex items-center gap-2">
-                  <HardDrive className="w-4 h-4 text-emerald-400" />
-                  System RAM
-                </span>
-                <span className="text-zinc-200">
-                  {hardware ? `${(hardware.memory.availableBytes / 1e9).toFixed(1)} GB Free / ${(hardware.memory.totalBytes / 1e9).toFixed(1)} GB Total` : ''}
-                </span>
-              </div>
-
-              {hardware?.primaryGPU && (
-                <div className="p-3 rounded bg-[#0d0f12] border border-[#1d2027] flex items-center justify-between">
-                  <span className="text-zinc-400 flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-400" />
-                    GPU Acceleration
-                  </span>
-                  <span className="text-zinc-200">
-                    {hardware.primaryGPU.model} ({hardware.primaryGPU.backend.toUpperCase()})
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-between pt-4">
-              <button
-                onClick={() => setStep(1)}
-                className="px-4 py-2 rounded bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700"
-              >
-                Back
-              </button>
-              <button
-                onClick={() => setStep(3)}
-                className="px-5 py-2 rounded bg-black dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-black text-xs font-medium"
-              >
-                View Capability Analysis →
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: CAPABILITY ANALYSIS */}
-        {step === 3 && (
-          <div className="space-y-5">
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-100">Capability Profile</h3>
-              <p className="text-xs text-zinc-400 mt-0.5">Calculated based on actual available RAM and compute:</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-xs font-mono">
-              <div className="p-3 rounded bg-[#0d0f12] border border-[#1d2027]">
-                <span className="text-zinc-500 text-[10px] block">MEMORY BUDGET</span>
-                <span className="text-zinc-200 font-bold text-sm">
-                  {capabilities ? `${(capabilities.memoryBudgetBytes / 1e9).toFixed(1)} GB` : ''}
-                </span>
-              </div>
-
-            <div className="p-3 rounded bg-[#0d0f12] border border-[#1d2027]">
-                <span className="text-zinc-500 text-[10px] block">MAX RECOMMENDED CONTEXT</span>
-                <span className="text-zinc-200 font-bold text-sm">
-                  {capabilities?.maxRecommendedContext} tokens
-                </span>
-              </div>
-            </div>
-
-            <div className="p-4 rounded bg-emerald-950/30 border border-emerald-800/40 text-xs text-emerald-300 flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-              <span>
-                Your host hardware is verified and ready to run local LLM models with zero external cloud dependencies.
-              </span>
-            </div>
-
-            <div className="flex justify-between pt-4">
-              <button
-                onClick={() => setStep(2)}
-                className="px-4 py-2 rounded bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700"
-              >
-                Back
-              </button>
-              <button
-                onClick={() => setStep(4)}
-                className="px-5 py-2 rounded bg-black dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-black text-xs font-medium"
-              >
-                Select Starter Model →
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 4: MODEL DOWNLOAD OR LOCAL FILE SELECTION */}
-        {step === 4 && (
-          <div className="space-y-5">
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-100">Select or Download Starter Model</h3>
-              <p className="text-xs text-zinc-400 mt-0.5">Select a local GGUF file already on your computer or download one:</p>
-            </div>
-
-            {/* Option A: Select existing local file */}
-            <div className="p-4 rounded-lg bg-[#0d0f12] border border-zinc-700 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-xs text-zinc-200 flex items-center gap-2">
-                  <FolderOpen className="w-4 h-4 text-zinc-900 dark:text-zinc-100" />
-                  Have an existing GGUF model on this computer?
-                </span>
-              </div>
-              <p className="text-[11px] text-zinc-400">
-                Choose any GGUF model file on your drive (e.g. Caden SQL, Llama, Mistral) to use immediately.
-              </p>
-              <button
-                onClick={handleSelectLocalFile}
-                className="px-4 py-2 rounded-md bg-black dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-black text-xs font-medium inline-flex items-center gap-2 transition-colors mt-1"
-              >
-                <FolderOpen className="w-3.5 h-3.5" />
-                <span>Select Local GGUF File...</span>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-3 text-xs text-zinc-500 font-mono">
-              <div className="flex-1 h-px bg-[#20232a]" />
-              <span>OR DOWNLOAD A CURATED MODEL</span>
-              <div className="flex-1 h-px bg-[#20232a]" />
-            </div>
-
-            <div className="space-y-2.5">
-              {[
-                {
-                  id: 'smollm2-135m-instruct',
-                  name: 'SmolLM2 135M Instruct',
-                  size: '145 MB',
-                  desc: 'Fastest download, ultra-lightweight, ideal for immediate verification.',
-                },
-                {
-                  id: 'qwen2.5-0.5b-instruct',
-                  name: 'Qwen 2.5 0.5B Instruct',
-                  size: '468 MB',
-                  desc: 'High quality compact reasoning model with multilingual support.',
-                },
-              ].map((m) => (
-                <div
-                  key={m.id}
-                  onClick={() => setSelectedModelId(m.id)}
-                  className={`p-3.5 rounded-lg border cursor-pointer transition-all ${
-                    selectedModelId === m.id
-                      ? 'bg-zinc-800/60 border-black dark:border-white ring-1 ring-black/20 dark:ring-white/20'
-                      : 'bg-[#0d0f12] border-[#22252c] hover:border-[#30343f]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-zinc-200">{m.name}</span>
-                    <span className="font-mono text-zinc-400">{m.size}</span>
-                  </div>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">{m.desc}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-between pt-4">
-              <button
-                onClick={() => setStep(3)}
-                className="px-4 py-2 rounded bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleDownloadAndStart}
-                disabled={isDownloading}
-                className="flex items-center gap-2 px-5 py-2 rounded bg-black dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-black text-xs font-medium disabled:opacity-50"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>{isDownloading ? 'Downloading Model...' : 'Download & Continue →'}</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 5: LAN CONFIGURATION */}
-        {step === 5 && (
-          <div className="space-y-5">
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-100">Network Exposure</h3>
-              <p className="text-xs text-zinc-400 mt-0.5">Configure how other devices access your server:</p>
-            </div>
-
-            <div className="space-y-3">
-              <div
-                onClick={() => setEnableLan(false)}
-                className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                  !enableLan
-                    ? 'bg-zinc-800/60 border-black dark:border-white ring-1 ring-black/20 dark:ring-white/20'
-                    : 'bg-[#0d0f12] border-[#22252c]'
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-zinc-200">Localhost Only (127.0.0.1)</span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
-                    Default
-                  </span>
-                </div>
-                <p className="text-[11px] text-zinc-400 mt-1">
-                  Only applications running on this machine can connect.
-                </p>
-              </div>
-
-              <div
-                onClick={() => setEnableLan(true)}
-                className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                  enableLan
-                    ? 'bg-zinc-800/60 border-black dark:border-white ring-1 ring-black/20 dark:ring-white/20'
-                    : 'bg-[#0d0f12] border-[#22252c]'
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-zinc-200 flex items-center gap-1.5">
-                    <Wifi className="w-3.5 h-3.5 text-zinc-900 dark:text-zinc-100" />
-                    Enable Local Network (LAN) Access
-                  </span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
-                    Multi-Device
-                  </span>
-                </div>
-                <p className="text-[11px] text-zinc-400 mt-1">
-                  Allows phones, laptops, and tablets on your Wi-Fi to use your local AI server with API keys or QR pairing.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-between pt-4">
-              <button
-                onClick={() => setStep(4)}
-                className="px-4 py-2 rounded bg-zinc-800 text-zinc-300 text-xs hover:bg-zinc-700"
-              >
-                Back
-              </button>
-              <button
-                onClick={() => setStep(6)}
-                className="px-5 py-2 rounded bg-black dark:bg-white hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-black text-xs font-medium"
-              >
-                Review & Launch →
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 6: READY */}
-        {step === 6 && (
-          <div className="space-y-4 text-center py-4">
-            <div className="w-12 h-12 rounded-xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <h2 className="text-xl font-bold text-zinc-100">Your AI Server is Ready!</h2>
-            <p className="text-xs text-zinc-400 max-w-md mx-auto leading-relaxed">
-              Your inference runtime is configured, model is ready, and the OpenAI-compatible API server is ready to launch.
-            </p>
-            <div className="pt-4">
-              <button
-                onClick={handleCompleteSetup}
-                disabled={isStartingServer}
-                className="px-6 py-2.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition-colors disabled:opacity-50"
-              >
-                {isStartingServer ? 'Starting Server...' : 'Launch Server & Open Playground →'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
+  const importModel = async () => {
+    setBusy(true); setError('');
+    try { const model = await app.importLocalModel(); if (model) { setInstallation(model); setStep('ready'); } }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not import this model.'); }
+    finally { setBusy(false); }
+  };
+  const launch = async () => {
+    if (!installation) return;
+    setBusy(true); setError('');
+    try {
+      // New installations stay local. Network sharing remains in Builder tools.
+      await app.updateServerConfig({ lanEnabled: false });
+      await app.startServer(installation.modelId, installation.variantId);
+      if (useAppStore.getState().serverState !== 'RUNNING') throw new Error('The model is not ready yet. Retry, or open Models to inspect its runtime.');
+      app.setSelectedModel(installation.name || installation.modelId);
+      localStorage.setItem(completionKey, 'completed'); app.setShowOnboarding(false); app.setActiveTab('playground');
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not start the local model.'); }
+    finally { setBusy(false); }
+  };
+  const progress = download?.totalBytes ? Math.min(100, Math.round(download.downloadedBytes / download.totalBytes * 100)) : undefined;
+  return <Dialog.Root open={app.showOnboarding} onOpenChange={open => { if (!open) dismiss(); }}><Dialog.Portal>
+    <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
+    <Dialog.Content style={{ width: 'min(640px, calc(100% - 32px))' }} onEscapeKeyDown={event => { if (busy) event.preventDefault(); }} onPointerDownOutside={event => event.preventDefault()} className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-[var(--foreground)] shadow-2xl">
+      <header className="flex items-start justify-between gap-4"><div><Dialog.Title className="text-xl font-semibold">{step === 'welcome' ? 'Welcome to Zaylo' : step === 'model' ? 'Choose your first model' : 'Your model is installed'}</Dialog.Title><Dialog.Description className="mt-2 text-sm leading-relaxed text-[var(--muted-foreground)]">{step === 'welcome' ? 'A private place to think, write and build with AI running on your computer.' : step === 'model' ? 'Download a local model, or import a GGUF file you already have.' : 'Start the local runtime to begin chatting. Your conversations stay on this device.'}</Dialog.Description></div><button type="button" aria-label="Set up later" disabled={busy} onClick={dismiss} className="rounded p-1 disabled:opacity-40"><X size={18} /></button></header>
+      {step === 'welcome' && <div className="mt-6 space-y-5"><div className="rounded-xl border border-[var(--border)] p-4 text-sm"><p>{app.hardware?.cpu.model || 'Hardware detection is still loading.'}</p><p className="mt-2 text-[var(--muted-foreground)]">{app.hardware ? `${size(app.hardware.memory.availableBytes)} memory available` : 'You can continue while hardware information loads.'}</p>{app.hardware?.primaryGPU && <p className="mt-2 text-[var(--muted-foreground)]">{app.hardware.primaryGPU.model}</p>}</div><p className="text-xs leading-relaxed text-[var(--muted-foreground)]">Downloading a model requires internet access and disk space. Once installed, supported models run locally. Voice has its own optional setup.</p><button type="button" className={controlClass} onClick={() => setStep('model')}>Choose a model</button></div>}
+      {step === 'model' && <div className="mt-6 space-y-4"><button type="button" className={`${controlClass} inline-flex items-center gap-2`} disabled={busy || pending} onClick={() => void importModel()}><FolderOpen size={16} />Import a GGUF file</button>
+        <fieldset disabled={busy || pending} className="space-y-2"><legend className="mb-3 text-sm font-medium">From the model catalog</legend>{shown.map(candidate => { const key = `${candidate.model.id}:${candidate.variant.id}`; const recommended = candidate === recommendation; return <label key={key} className="flex cursor-pointer gap-3 rounded-xl border border-[var(--border)] p-3 has-[:checked]:border-[var(--theme-accent)] has-[:checked]:bg-[var(--theme-accent-soft)]"><input type="radio" name="starter-model" className="mt-1 accent-[var(--theme-accent)]" checked={choice === candidate} onChange={() => setSelected(key)} /><span><span className="block text-sm font-medium">{candidate.model.name} · {candidate.variant.name}{recommended ? ' · Suggested' : ''}</span><span className="mt-1 block text-xs text-[var(--muted-foreground)]">{size(candidate.variant.sizeBytes)} download · About {size(candidate.variant.estimatedRAMBytes)} RAM</span></span></label>; })}</fieldset>
+        {!candidates.length && <p className="text-sm text-[var(--muted-foreground)]">No downloadable text models are available yet. Import a GGUF file or open Models after setup.</p>}
+        {choice && budget > 0 && choice.variant.estimatedRAMBytes > budget && <p role="status" className="text-xs text-[var(--muted-foreground)]">This model exceeds the estimated memory budget. A smaller model or additional free memory may be needed.</p>}
+        {pending ? <div className="space-y-3" role="status"><progress className="h-2 w-full accent-[var(--theme-accent)]" max={100} value={progress} aria-label="Model download progress" /><p className="text-xs text-[var(--muted-foreground)]">{download?.status === 'completed' ? 'Finalizing installation…' : download ? `${size(download.downloadedBytes)}${download.totalBytes ? ` / ${size(download.totalBytes)}` : ''} downloaded${progress === undefined ? '' : ` · ${progress}%`}` : 'Preparing download…'}</p><button type="button" className={controlClass} disabled={busy} onClick={() => void cancelDownload()}>Cancel download</button><p className="text-xs text-[var(--muted-foreground)]">Closing setup lets the download continue in the background.</p></div> : <button type="button" className={`${controlClass} inline-flex items-center gap-2`} disabled={busy || !choice} onClick={() => void beginDownload()}><Download size={16} />{busy ? 'Preparing…' : 'Download selected model'}</button>}
+        {download?.status === 'failed' && <p role="alert" className="text-sm text-[var(--status-error)]">{download.error || 'Download failed. Please try again.'}</p>}
+      </div>}
+      {step === 'ready' && <div className="mt-6 space-y-5"><div className="flex items-center gap-3 rounded-xl border border-[var(--border)] p-4"><CheckCircle2 className="text-[var(--theme-accent)]" /><span className="text-sm">{installation?.name}</span></div><button type="button" className={controlClass} disabled={busy} onClick={() => void launch()}>{busy ? 'Starting your model…' : 'Start chatting'}</button></div>}
+      {error && <p role="alert" className="mt-4 break-words text-sm text-[var(--status-error)]">{error}</p>}
+      <footer className="mt-6 border-t border-[var(--border)] pt-4"><button type="button" disabled={busy} onClick={dismiss} className="text-xs text-[var(--muted-foreground)] underline underline-offset-4">Set up later</button></footer>
+    </Dialog.Content>
+  </Dialog.Portal></Dialog.Root>;
+}
