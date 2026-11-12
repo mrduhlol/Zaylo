@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { ChatMemoryInspector } from '../../features/conversations/ChatMemoryInspector';
 import { exportChatPdf } from '../../api/exportChatPdf';
 import { themeArtwork } from '../../theme/artwork';
@@ -430,19 +431,18 @@ export const Sidebar: React.FC = () => {
         isSidebarCollapsed ? 'w-0 border-0' : 'w-[280px]'
       }`}
     >
-      {isSidebarCollapsed ? (
+      {isSidebarCollapsed ? createPortal(
         /* Collapsed: no rail, no logo — just the reopen toggle; space is reclaimed. */
-        <div className="fixed top-7 left-2 z-40">
-          <div className="h-7 shrink-0 w-full [-webkit-app-region:drag]" />
+        <div className="fixed top-[18px] left-2 z-40">
           <button
             onClick={toggleSidebar}
-            className="p-1.5 rounded-md text-zinc-400 dark:text-[#A1A1AA] hover:text-zinc-700 dark:hover:text-[#F5F5F5] hover:bg-zinc-100 dark:hover:bg-[#202020] transition-colors"
+            className="[-webkit-app-region:no-drag] p-1.5 rounded-md text-zinc-400 dark:text-[#A1A1AA] hover:text-zinc-700 dark:hover:text-[#F5F5F5] hover:bg-zinc-100 dark:hover:bg-[#202020] transition-colors"
             title="Expand sidebar"
             aria-label="Expand sidebar"
           >
             <PanelLeft className="w-4 h-4" />
           </button>
-        </div>
+        </div>, document.body
       ) : (
         <>
           <div className="flex flex-col min-h-0 flex-1">
@@ -601,10 +601,10 @@ export const Sidebar: React.FC = () => {
       )}
 
       {memoryChat && <ChatMemoryInspector key={memoryChat.id} conversationId={memoryChat.id} title={memoryChat.title} temporary={memoryChat.temporary} onClose={() => setMemoryChat(null)} />}
-      {undoAction && <div role="status" className="fixed bottom-5 left-4 z-50 flex gap-4 items-center rounded-lg p-3 shadow-lg bg-[var(--card)] text-[var(--foreground)] text-sm"><span>{undoAction.label}</span><button onClick={undoChatAction} className="underline font-semibold">Undo</button><button aria-label="Dismiss undo" onClick={() => useAppStore.setState({ undoAction: undefined })}><X className="w-4 h-4" /></button></div>}
-      {notice && <div role="status" className="fixed bottom-20 left-4 z-50 rounded-lg p-3 bg-[var(--card)] text-[var(--foreground)] text-sm">{notice}<button aria-label="Dismiss message" className="ml-3 underline" onClick={() => setNotice('')}>Dismiss</button></div>}
+      {undoAction && createPortal(<div role="status" className="fixed bottom-5 left-4 z-50 flex gap-4 items-center rounded-lg p-3 shadow-lg bg-[var(--card)] text-[var(--foreground)] text-sm"><span>{undoAction.label}</span><button onClick={undoChatAction} className="underline font-semibold">Undo</button><button aria-label="Dismiss undo" onClick={() => useAppStore.setState({ undoAction: undefined })}><X className="w-4 h-4" /></button></div>, document.body)}
+      {notice && createPortal(<div role="status" className="fixed bottom-20 left-4 z-50 rounded-lg p-3 bg-[var(--card)] text-[var(--foreground)] text-sm">{notice}<button aria-label="Dismiss message" className="ml-3 underline" onClick={() => setNotice('')}>Dismiss</button></div>, document.body)}
       {/* Chat context menu (right-click or dots) */}
-      {chatMenu && (
+      {chatMenu && createPortal(
         <div
           ref={menuRef}
           role="menu"
@@ -691,7 +691,7 @@ export const Sidebar: React.FC = () => {
             <Trash2 className="w-3.5 h-3.5" />
             Delete
           </button>
-        </div>
+        </div>, document.body
       )}
     </aside>
   );
