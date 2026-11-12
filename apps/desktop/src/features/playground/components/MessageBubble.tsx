@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Copy,
+  Volume2,
+  Square,
   Check,
   RotateCw,
   Clock,
@@ -40,6 +42,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   onOpenPresentationStudio,
   onSaveToMemory,
 }) => {
+  const [actionError, setActionError] = useState('');
+  const [speaking, setSpeaking] = useState(false);
+  const [localVoices, setLocalVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const utterance = useRef<SpeechSynthesisUtterance | null>(null);
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    const speech = window.speechSynthesis;
+    const refresh = () => setLocalVoices(speech.getVoices().filter(voice => voice.localService));
+    refresh(); speech.addEventListener('voiceschanged', refresh);
+    return () => { speech.removeEventListener('voiceschanged', refresh); if (utterance.current) { utterance.current.onend = null; utterance.current.onerror = null; speech.cancel(); } };
+  }, []);
   const [copied, setCopied] = useState(false);
   const [savedMem, setSavedMem] = useState(false);
   const [feedback, setFeedback] = useState<'liked' | 'disliked' | null>(null);
@@ -60,10 +73,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const rawText = extractRawText(message.content);
   const parsed = parseMessageSpecs(rawText);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(rawText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    try { await navigator.clipboard.writeText(rawText); setActionError(''); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+    catch { setActionError('Could not copy. Select the response text and copy it manually.'); }
+  };
+  const readAloud = () => {
+    if (speaking) { window.speechSynthesis.cancel(); utterance.current = null; setSpeaking(false); return; }
+    if (!localVoices.length) return;
+    const speech = new SpeechSynthesisUtterance(rawText);
+    speech.voice = localVoices.find(voice => voice.default) || localVoices[0];
+    speech.onend = () => { utterance.current = null; setSpeaking(false); };
+    speech.onerror = () => { utterance.current = null; setSpeaking(false); setActionError('Local read aloud stopped. Please try again.'); };
+    utterance.current = speech; setActionError(''); setSpeaking(true); window.speechSynthesis.speak(speech);
   };
 
   const handleCreatePresentationFromChart = (chart: ChartSpec) => {
@@ -191,6 +212,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
 
+            <button type="button" onClick={readAloud} disabled={!localVoices.length}
+              aria-label={speaking ? 'Stop reading aloud' : 'Read response aloud'} aria-pressed={speaking}
+              title={localVoices.length ? (speaking ? 'Stop reading aloud' : 'Read aloud using an on-device voice') : 'No on-device voice is available. Install a system voice to enable read aloud.'}
+              className="rounded-md p-1.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)] disabled:opacity-40">
+              {speaking ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+            </button>
+            {actionError && <span role="alert" className="max-w-64 text-xs text-[var(--status-error)]">{actionError}</span>}
             {/* Regenerate Button */}
             {onRegenerate && (
               <button
