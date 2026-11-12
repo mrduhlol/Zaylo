@@ -320,8 +320,19 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
     return PersonaResolver.resolve(targetId, personas, activePersonaId || defaultPersonaId);
   }, [activeConv?.personaId, activePersonaId, personas, defaultPersonaId]);
 
-  // Synchronize when the user activates a persona in the Personas section
+  // Restore a chat's selection before applying later changes from the Personas section.
+  const selectionConversationRef = useRef<string | null>(null);
   useEffect(() => {
+    if (selectionConversationRef.current !== activeConvId) {
+      selectionConversationRef.current = activeConvId;
+      if (activeConv?.modelId && unifiedModels.some(model => model.id === activeConv.modelId)) {
+        setSelectedModelId(activeConv.modelId);
+      }
+      if (activeConv?.personaId) {
+        setActivePersonaId(activeConv.personaId);
+        return;
+      }
+    }
     if (!activePersonaId) return;
     setConversations((prev) =>
       prev.map((c) =>
