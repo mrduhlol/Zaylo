@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Play,
   Layers,
@@ -6,10 +6,10 @@ import {
   LayoutGrid,
   Plus,
   MessageSquare,
-  CircleDot,
-  Settings,
-  PanelLeftClose,
-  PanelLeft,
+  Search,
+  Pin,
+  ChevronDown,
+  ChevronRight,
   MoreHorizontal,
   Trash2,
   Edit2,
@@ -22,8 +22,54 @@ import {
   Terminal,
   Gauge,
   Database,
+  PanelLeftClose,
+  PanelLeft,
+  Archive,
+  Share2,
+  FolderInput,
 } from 'lucide-react';
 import { useAppStore, NavTab } from '../../stores/useAppStore';
+import { useWorkspacePreferences } from '../../stores/useWorkspacePreferences';
+import { AtomIcon } from './sidebar/AtomIcon';
+import type { PlaygroundConversation } from '../../features/playground/types';
+
+/**
+ * Conversations optionally carry a `pinned` flag persisted through the app
+ * store's local conversation persistence (setConversations). It is declared
+ * here until promoted to the shared conversation type.
+ */
+type SidebarConversation = PlaygroundConversation & { pinned?: boolean };
+
+interface NavItem {
+  id: NavTab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: number;
+}
+
+const PRIMARY_TOOLS: NavItem[] = [
+  { id: 'playground', label: 'Playground', icon: Play },
+  { id: 'models', label: 'Models', icon: Layers },
+  { id: 'personas', label: 'Personas', icon: Users },
+  { id: 'loftydb', label: 'LoftyDB', icon: Database },
+  { id: 'forge', label: 'Forge', icon: LayoutGrid },
+];
+
+const SECONDARY_TOOLS: NavItem[] = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'server', label: 'Server & API', icon: Server },
+  { id: 'devices', label: 'Connected Devices', icon: Smartphone },
+  { id: 'performance', label: 'Performance', icon: Activity },
+  { id: 'logs', label: 'Terminal Logs', icon: Terminal },
+  { id: 'benchmark', label: 'Hardware Benchmark', icon: Gauge },
+];
+
+interface ChatMenuState {
+  conv: SidebarConversation;
+  x: number;
+  y: number;
+  confirmingDelete: boolean;
+}
 
 export const Sidebar: React.FC = () => {
   const {
@@ -36,6 +82,7 @@ export const Sidebar: React.FC = () => {
     createNewChat,
     deleteChat,
     renameChat,
+    setConversations,
     isSidebarCollapsed,
     toggleSidebar,
     installedModels,
@@ -43,315 +90,527 @@ export const Sidebar: React.FC = () => {
     loftyDbStatus,
   } = useAppStore();
 
-  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const { builderMode, collapsedSections, toggleSection } = useWorkspacePreferences();
+
+  const [searchQuery, setSearchQuery] = useState('');
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
+  const [chatMenu, setChatMenu] = useState<ChatMenuState | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
-  const primaryNav: { id: NavTab; label: string; icon: React.ComponentType<{ className?: string }>; badge?: number }[] = [
-    { id: 'playground', label: 'Playground', icon: Play },
-    { id: 'models', label: 'Models', icon: Layers, badge: installedModels.length },
-    { id: 'personas', label: 'Personas', icon: Users },
-    { id: 'loftydb', label: 'LoftyDB', icon: Database, badge: memories.length },
-    { id: 'forge', label: 'Forge', icon: LayoutGrid },
-  ];
+  const convs = conversations as SidebarConversation[];
 
-  const secondaryNav: { id: NavTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'server', label: 'Server & API', icon: Server },
-    { id: 'devices', label: 'Connected Devices', icon: Smartphone },
-    { id: 'performance', label: 'Performance', icon: Activity },
-    { id: 'logs', label: 'Terminal Logs', icon: Terminal },
-    { id: 'benchmark', label: 'Hardware Benchmark', icon: Gauge },
-  ];
+  const matchesSearch = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return () => true;
+    return (conv: SidebarConversation) => {
+      if ((conv.title || 'New Chat').toLowerCase().includes(q)) return true;
+      return conv.messages.some((m) =>
+        typeof m.content === 'string' ? m.content.toLowerCase().includes(q) : false
+      );
+    };
+  }, [searchQuery]);
 
-  const handleStartRename = (e: React.MouseEvent, id: string, currentTitle: string) => {
-    e.stopPropagation();
-    setEditingChatId(id);
-    setEditingTitle(currentTitle);
+  const pinnedChats = useMemo(
+    () => convs.filter((c) => c.pinned && matchesSearch(c)).sort((a, b) => b.updatedAt - a.updatedAt),
+    [convs, matchesSearch]
+  );
+
+  const recentChats = useMemo(
+    () =>
+      convs
+        .filter((c) => !c.pinned && matchesSearch(c))
+        .sort((a, b) => b.updatedAt - a.updatedAt),
+    [convs, matchesSearch]
+  );
+
+  const pinnedExpanded = !collapsedSections['pinned'];
+  const recentExpanded = !collapsedSections['recent'];
+  const moreToolsExpanded = !collapsedSections['more-tools'];
+
+  // Close the chat menu on outside click or Escape.
+  useEffect(() => {
+    if (!chatMenu) return;
+    const handlePointerDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setChatMenu(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setChatMenu(null);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [chatMenu]);
+
+  const openChatMenu = (conv: SidebarConversation, x: number, y: number) => {
+    setChatMenu({ conv, x, y, confirmingDelete: false });
   };
 
-  const handleSaveRename = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (editingTitle.trim()) {
-      renameChat(id, editingTitle.trim());
+  const togglePin = (conv: SidebarConversation) => {
+    setConversations((prev) =>
+      (prev as SidebarConversation[]).map((c) =>
+        c.id === conv.id ? { ...c, pinned: !c.pinned } : c
+      )
+    );
+    setChatMenu(null);
+  };
+
+  const handleStartRename = (conv: SidebarConversation) => {
+    setEditingChatId(conv.id);
+    setEditingTitle(conv.title);
+    setChatMenu(null);
+  };
+
+  const saveRename = () => {
+    if (editingChatId && editingTitle.trim()) {
+      renameChat(editingChatId, editingTitle.trim());
     }
     setEditingChatId(null);
   };
 
-  const handleCancelRename = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingChatId(null);
+  const handleDelete = (conv: SidebarConversation) => {
+    if (chatMenu?.confirmingDelete) {
+      deleteChat(conv.id);
+      setChatMenu(null);
+    } else if (chatMenu) {
+      setChatMenu({ ...chatMenu, confirmingDelete: true });
+    }
   };
 
-  const handleDelete = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    deleteChat(id);
+  const navButtonClass = (isActive: boolean) =>
+    `w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+      isActive
+        ? 'bg-[#f5f5f5] dark:bg-[#202020] text-[#111111] dark:text-[#F5F5F5]'
+        : 'text-zinc-600 dark:text-[#A1A1AA] hover:text-zinc-900 dark:hover:text-[#F5F5F5] hover:bg-[#fafafa] dark:hover:bg-[#202020]'
+    }`;
+
+  const renderChatRow = (conv: SidebarConversation) => {
+    const isActive = activeConvId === conv.id && activeTab === 'playground';
+    const isEditing = editingChatId === conv.id;
+
+    if (isEditing) {
+      return (
+        <div
+          key={conv.id}
+          className="px-2 py-1 rounded-lg bg-[#f5f5f5] dark:bg-[#202020] flex items-center gap-1.5 text-xs"
+        >
+          <input
+            type="text"
+            autoFocus
+            value={editingTitle}
+            onChange={(e) => setEditingTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveRename();
+              if (e.key === 'Escape') setEditingChatId(null);
+            }}
+            className="flex-1 bg-transparent border-none text-xs text-[#111111] dark:text-[#F5F5F5] focus:outline-none"
+          />
+          <button onClick={saveRename} className="p-0.5 text-emerald-600 hover:text-emerald-700" title="Save rename">
+            <Check className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setEditingChatId(null)}
+            className="p-0.5 text-zinc-400 hover:text-zinc-600"
+            title="Cancel rename"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={conv.id}
+        onClick={() => selectChat(conv.id)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          openChatMenu(conv, e.clientX, e.clientY);
+        }}
+        tabIndex={0}
+        role="button"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            selectChat(conv.id);
+          }
+        }}
+        className={`w-full group px-2.5 py-2 rounded-lg text-xs flex items-center justify-between cursor-pointer transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-400 dark:focus-visible:ring-[#3f3f46] ${
+          isActive
+            ? 'bg-[#f5f5f5] dark:bg-[#202020] text-[#111111] dark:text-[#F5F5F5] font-medium'
+            : 'text-zinc-600 dark:text-[#A1A1AA] hover:bg-[#fafafa] dark:hover:bg-[#202020] hover:text-[#111111] dark:hover:text-[#F5F5F5]'
+        }`}
+      >
+        <div className="flex items-center gap-2 truncate min-w-0">
+          {conv.pinned ? (
+            <Pin
+              className="w-3 h-3 shrink-0 fill-current text-zinc-500 dark:text-[#A1A1AA]"
+              aria-label="Pinned chat"
+            />
+          ) : isActive ? (
+            <MessageSquare className="w-3.5 h-3.5 shrink-0 text-[#111111] dark:text-[#F5F5F5]" />
+          ) : null}
+          <span className="truncate">{conv.title || 'New Chat'}</span>
+        </div>
+
+        {/* Hover/focus-only controls; unboxed (no border/background chip). */}
+        <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 flex items-center shrink-0 ml-1 transition-opacity">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePin(conv);
+            }}
+            className="p-0.5 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-[#F5F5F5] transition-colors bg-transparent border-0"
+            title={conv.pinned ? 'Unpin chat' : 'Pin chat'}
+          >
+            <Pin className={`w-3 h-3 ${conv.pinned ? 'fill-current' : ''}`} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              openChatMenu(conv, rect.left, rect.bottom + 4);
+            }}
+            className="p-0.5 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-[#F5F5F5] transition-colors bg-transparent border-0"
+            title="Chat options"
+          >
+            <MoreHorizontal className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    );
   };
+
+  const renderSectionHeader = (
+    name: string,
+    label: string,
+    count: number,
+    expanded: boolean
+  ) => (
+    <button
+      onClick={() => toggleSection(name)}
+      className="w-full flex items-center justify-between px-2 py-1 rounded text-[11px] font-medium text-zinc-500 dark:text-[#737373] hover:text-zinc-800 dark:hover:text-[#A1A1AA] transition-colors"
+      aria-expanded={expanded}
+    >
+      <span className="flex items-center gap-1">
+        {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        {label}
+      </span>
+      <span className="font-mono text-[10px]">{count}</span>
+    </button>
+  );
+
+  const chatList = (
+    <div className="flex-1 flex flex-col min-h-0 px-3">
+      {/* New chat */}
+      <button
+        onClick={() => createNewChat()}
+        className="w-full flex items-center gap-2 px-3 py-2 mb-2 rounded-lg text-xs font-medium text-zinc-700 dark:text-[#A1A1AA] hover:text-zinc-900 dark:hover:text-[#F5F5F5] hover:bg-[#fafafa] dark:hover:bg-[#202020] transition-colors"
+        title="New chat (Ctrl+Shift+O)"
+      >
+        <Plus className="w-4 h-4" />
+        <span>New chat</span>
+      </button>
+
+      {/* Search chats */}
+      <div className="relative mb-2 px-0">
+        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-[#737373] pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search chats..."
+          className="w-full pl-8 pr-2 py-1.5 rounded-lg bg-transparent border border-[#eaeaea] dark:border-[#262626] text-xs text-[#111111] dark:text-[#F5F5F5] placeholder:text-zinc-400 dark:placeholder:text-[#737373] focus:outline-none focus:border-zinc-400 dark:focus:border-[#3f3f46] transition-colors"
+        />
+      </div>
+
+      {/* Personas (available in both modes; rendered here in normal mode) */}
+      {!builderMode && (
+        <div className="mb-2">
+          {(() => {
+            const personas = PRIMARY_TOOLS.find((t) => t.id === 'personas')!;
+            const Icon = personas.icon;
+            const isActive = activeTab === 'personas';
+            return (
+              <button onClick={() => setActiveTab('personas')} className={navButtonClass(isActive)} title="Personas">
+                <div className="flex items-center gap-2.5">
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#111111] dark:text-[#F5F5F5]' : 'text-zinc-500 dark:text-[#737373]'}`} />
+                  <span>Personas</span>
+                </div>
+              </button>
+            );
+          })()}
+        </div>
+      )}
+
+      {searchQuery && pinnedChats.length === 0 && recentChats.length === 0 && (
+        <div className="px-2 py-4 text-[11px] text-zinc-400 dark:text-[#737373]">
+          No chats match “{searchQuery}”.
+        </div>
+      )}
+
+      {/* Pinned — only rendered when populated */}
+      {pinnedChats.length > 0 && (
+        <div className="mb-1">
+          {renderSectionHeader('pinned', 'Pinned', pinnedChats.length, pinnedExpanded)}
+          {pinnedExpanded && <div className="space-y-1 mt-0.5">{pinnedChats.map(renderChatRow)}</div>}
+        </div>
+      )}
+
+      {/* Recent chats */}
+      {recentChats.length > 0 && (
+        <div className="mb-1">
+          {renderSectionHeader('recent', 'Recent', recentChats.length, recentExpanded)}
+          {recentExpanded && <div className="space-y-1 mt-0.5 pb-2">{recentChats.map(renderChatRow)}</div>}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <aside
-      className={`bg-white dark:bg-[#0D0D0D] border-r border-[#eaeaea] dark:border-[#262626] flex flex-col justify-between select-none shrink-0 h-screen transition-all duration-200 ${
-        isSidebarCollapsed ? 'w-[68px]' : 'w-[280px]'
+      className={`bg-white dark:bg-[#0D0D0D] border-r border-[#eaeaea] dark:border-[#262626] flex flex-col select-none shrink-0 h-screen transition-all duration-200 overflow-hidden ${
+        isSidebarCollapsed ? 'w-12' : 'w-[280px]'
       }`}
     >
-      <div className="flex flex-col min-h-0 flex-1">
-        {/* macOS Traffic Lights Header & Drag Spacer */}
-        <div className="h-7 shrink-0 w-full [-webkit-app-region:drag]" />
-
-        {/* Brand Header */}
-        <div className={`px-4 pb-3 pt-1 flex items-center justify-between ${isSidebarCollapsed ? 'justify-center px-2' : ''}`}>
-          <div
-            onClick={() => setActiveTab('playground')}
-            className="flex items-center gap-2.5 cursor-pointer group"
-            title="Zaylo AI Studio"
-          >
-            {/* Z Logo Badge */}
-            <div className="w-7 h-7 rounded-lg bg-black dark:bg-white text-white dark:text-black flex items-center justify-center font-bold text-sm tracking-tight shadow-sm shrink-0 transition-transform group-hover:scale-105">
-              <span>Z</span>
-            </div>
-
-            {!isSidebarCollapsed && (
-              <span className="font-semibold text-base text-[#111111] dark:text-[#F5F5F5] tracking-tight">
-                Zaylo
-              </span>
-            )}
-          </div>
-
+      {isSidebarCollapsed ? (
+        /* Collapsed: no rail, no logo — just the reopen toggle; space is reclaimed. */
+        <div className="flex flex-col items-center h-full">
+          <div className="h-7 shrink-0 w-full [-webkit-app-region:drag]" />
           <button
             onClick={toggleSidebar}
-            className="p-1 rounded-md text-zinc-400 dark:text-[#A1A1AA] hover:text-zinc-700 dark:hover:text-[#F5F5F5] hover:bg-zinc-100 dark:hover:bg-[#202020] transition-colors"
-            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            className="p-1.5 rounded-md text-zinc-400 dark:text-[#A1A1AA] hover:text-zinc-700 dark:hover:text-[#F5F5F5] hover:bg-zinc-100 dark:hover:bg-[#202020] transition-colors"
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
           >
-            {isSidebarCollapsed ? (
-              <PanelLeft className="w-4 h-4" />
-            ) : (
-              <PanelLeftClose className="w-4 h-4" />
-            )}
+            <PanelLeft className="w-4 h-4" />
           </button>
         </div>
+      ) : (
+        <>
+          <div className="flex flex-col min-h-0 flex-1">
+            {/* macOS Traffic Lights Header & Drag Spacer */}
+            <div className="h-7 shrink-0 w-full [-webkit-app-region:drag]" />
 
-        {/* Primary Navigation */}
-        <nav className="px-3 pt-2 space-y-1 shrink-0">
-          {primaryNav.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActiveTab(item.id);
-                  setIsMoreOpen(false);
-                }}
-                className={`w-full flex items-center ${
-                  isSidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3'
-                } py-2 rounded-lg text-xs font-medium transition-colors ${
-                  isActive
-                    ? 'bg-[#f5f5f5] dark:bg-[#202020] text-[#111111] dark:text-[#F5F5F5]'
-                    : 'text-zinc-600 dark:text-[#A1A1AA] hover:text-zinc-900 dark:hover:text-[#F5F5F5] hover:bg-[#fafafa] dark:hover:bg-[#202020]'
-                }`}
-                title={item.label}
+            {/* Brand Header */}
+            <div className="px-4 pb-3 pt-1 flex items-center justify-between">
+              <div
+                onClick={() => setActiveTab('playground')}
+                className="flex items-center gap-2.5 cursor-pointer group"
+                title="Zaylo AI Studio"
               >
-                <div className="flex items-center gap-2.5">
-                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#111111] dark:text-[#F5F5F5]' : 'text-zinc-500 dark:text-[#737373]'}`} />
-                  {!isSidebarCollapsed && <span>{item.label}</span>}
-                  {!isSidebarCollapsed && item.id === 'loftydb' && (
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        loftyDbStatus?.connected ? 'bg-emerald-500' : 'bg-zinc-400'
-                      }`}
-                      title={loftyDbStatus?.connected ? 'LoftyDB Connected' : 'LoftyDB Offline'}
-                    />
-                  )}
+                <div className="w-7 h-7 rounded-lg bg-black dark:bg-white text-white dark:text-black flex items-center justify-center font-bold text-sm tracking-tight shadow-sm shrink-0 transition-transform group-hover:scale-105">
+                  <span>Z</span>
                 </div>
-                {!isSidebarCollapsed && typeof item.badge === 'number' && item.badge > 0 && (
-                  <span className="px-1.5 py-0.2 text-[10px] font-mono rounded bg-zinc-200/70 dark:bg-[#191919] text-zinc-700 dark:text-[#A1A1AA] border border-transparent dark:border-[#262626]">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-
-          {/* Secondary Tools Menu Trigger */}
-          <div className="relative">
-            <button
-              onClick={() => setIsMoreOpen(!isMoreOpen)}
-              className={`w-full flex items-center ${
-                isSidebarCollapsed ? 'justify-center px-0' : 'justify-between px-3'
-              } py-2 rounded-lg text-xs font-medium transition-colors ${
-                secondaryNav.some((s) => s.id === activeTab)
-                  ? 'bg-[#f5f5f5] dark:bg-[#202020] text-[#111111] dark:text-[#F5F5F5]'
-                  : 'text-zinc-500 dark:text-[#A1A1AA] hover:text-zinc-900 dark:hover:text-[#F5F5F5] hover:bg-[#fafafa] dark:hover:bg-[#202020]'
-              }`}
-              title="More workspace tools"
-            >
-              <div className="flex items-center gap-2.5">
-                <MoreHorizontal className="w-4 h-4 shrink-0 text-zinc-500 dark:text-[#737373]" />
-                {!isSidebarCollapsed && <span>More Tools</span>}
+                <span className="font-semibold text-base text-[#111111] dark:text-[#F5F5F5] tracking-tight">
+                  Zaylo
+                </span>
               </div>
-            </button>
 
-            {isMoreOpen && (
-              <div className="absolute left-full ml-1.5 top-0 w-52 rounded-xl bg-white dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] shadow-xl py-1.5 z-50 text-xs">
-                <div className="px-3 py-1 text-[10px] font-mono text-zinc-400 dark:text-[#737373] uppercase tracking-wider border-b border-zinc-100 dark:border-[#222222]">
-                  Workspace Tools
-                </div>
-                {secondaryNav.map((item) => {
+              <button
+                onClick={toggleSidebar}
+                className="p-1 rounded-md text-zinc-400 dark:text-[#A1A1AA] hover:text-zinc-700 dark:hover:text-[#F5F5F5] hover:bg-zinc-100 dark:hover:bg-[#202020] transition-colors"
+                title="Collapse sidebar"
+                aria-label="Collapse sidebar"
+              >
+                <PanelLeftClose className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Builder tools: ALL original destinations, above New chat */}
+            {builderMode && (
+              <nav className="px-3 pb-1 space-y-1 shrink-0">
+                {PRIMARY_TOOLS.map((item) => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
+                  const badge =
+                    item.id === 'models'
+                      ? installedModels.length
+                      : item.id === 'loftydb'
+                      ? memories.length
+                      : undefined;
                   return (
                     <button
                       key={item.id}
-                      onClick={() => {
-                        setActiveTab(item.id);
-                        setIsMoreOpen(false);
-                      }}
-                      className={`w-full px-3 py-1.5 text-left flex items-center gap-2.5 transition-colors ${
-                        isActive
-                          ? 'bg-[#f5f5f5] dark:bg-[#202020] text-[#111111] dark:text-[#F5F5F5] font-semibold'
-                          : 'text-zinc-700 dark:text-[#A1A1AA] hover:bg-zinc-50 dark:hover:bg-[#202020] hover:text-[#111111] dark:hover:text-[#F5F5F5]'
-                      }`}
+                      onClick={() => setActiveTab(item.id)}
+                      className={navButtonClass(isActive)}
+                      title={item.label}
                     >
-                      <Icon className="w-3.5 h-3.5" />
-                      <span>{item.label}</span>
+                      <div className="flex items-center gap-2.5">
+                        <Icon
+                          className={`w-4 h-4 shrink-0 ${
+                            isActive ? 'text-[#111111] dark:text-[#F5F5F5]' : 'text-zinc-500 dark:text-[#737373]'
+                          }`}
+                        />
+                        <span>{item.label}</span>
+                        {item.id === 'loftydb' && (
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              loftyDbStatus?.connected ? 'bg-emerald-500' : 'bg-zinc-400'
+                            }`}
+                            title={loftyDbStatus?.connected ? 'LoftyDB Connected' : 'LoftyDB Offline'}
+                          />
+                        )}
+                      </div>
+                      {typeof badge === 'number' && badge > 0 && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-zinc-200/70 dark:bg-[#191919] text-zinc-700 dark:text-[#A1A1AA] border border-transparent dark:border-[#262626]">
+                          {badge}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
-              </div>
-            )}
-          </div>
-        </nav>
 
-        {/* Divider */}
-        {!isSidebarCollapsed && (
-          <div className="border-t border-[#eaeaea] dark:border-[#262626] mx-3 my-3" />
-        )}
-
-        {/* Chats History Section */}
-        {!isSidebarCollapsed && (
-          <div className="flex-1 flex flex-col min-h-0 px-3">
-            <div className="flex items-center justify-between pb-1.5 px-2">
-              <span className="text-[11px] font-medium text-zinc-500 dark:text-[#737373]">
-                Chats
-              </span>
-              <button
-                onClick={() => createNewChat()}
-                className="p-1 rounded-md text-zinc-500 dark:text-[#A1A1AA] hover:text-zinc-900 dark:hover:text-[#F5F5F5] hover:bg-zinc-100 dark:hover:bg-[#202020] transition-colors"
-                title="New Chat"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Conversation list */}
-            <div className="flex-1 overflow-y-auto space-y-0.5 pr-0.5 scrollbar-thin">
-              {conversations.map((conv) => {
-                const isActive = activeConvId === conv.id && activeTab === 'playground';
-                const isEditing = editingChatId === conv.id;
-
-                if (isEditing) {
-                  return (
-                    <div
-                      key={conv.id}
-                      className="px-2 py-1 rounded-lg bg-[#f5f5f5] dark:bg-[#202020] flex items-center gap-1.5 text-xs"
-                    >
-                      <input
-                        type="text"
-                        autoFocus
-                        value={editingTitle}
-                        onChange={(e) => setEditingTitle(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveRename(e as any, conv.id);
-                          if (e.key === 'Escape') handleCancelRename(e as any);
-                        }}
-                        className="flex-1 bg-transparent border-none text-xs text-[#111111] dark:text-[#F5F5F5] focus:outline-none"
-                      />
-                      <button
-                        onClick={(e) => handleSaveRename(e, conv.id)}
-                        className="p-0.5 text-emerald-600 hover:text-emerald-700"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={handleCancelRename}
-                        className="p-0.5 text-zinc-400 hover:text-zinc-600"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div
-                    key={conv.id}
-                    onClick={() => selectChat(conv.id)}
-                    className={`w-full group px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between cursor-pointer transition-colors ${
-                      isActive
-                        ? 'bg-[#f5f5f5] dark:bg-[#202020] text-[#111111] dark:text-[#F5F5F5] font-medium'
-                        : 'text-zinc-600 dark:text-[#A1A1AA] hover:bg-[#fafafa] dark:hover:bg-[#202020] hover:text-[#111111] dark:hover:text-[#F5F5F5]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      {isActive ? (
-                        <MessageSquare className="w-3.5 h-3.5 shrink-0 text-[#111111] dark:text-[#F5F5F5]" />
-                      ) : (
-                        <CircleDot className="w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-[#737373]" />
-                      )}
-                      <span className="truncate">{conv.title || 'New Chat'}</span>
-                    </div>
-
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 shrink-0 ml-1 transition-opacity">
-                      <button
-                        onClick={(e) => handleStartRename(e, conv.id, conv.title)}
-                        className="p-1 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-[#F5F5F5] hover:bg-zinc-200/60 dark:hover:bg-[#262626]"
-                        title="Rename chat"
-                      >
-                        <Edit2 className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={(e) => handleDelete(e, conv.id)}
-                        className="p-1 rounded text-zinc-400 hover:text-rose-600 hover:bg-zinc-200/60 dark:hover:bg-[#262626]"
-                        title="Delete chat"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
+                {/* More Tools — inline collapsible group of the remaining tools */}
+                <button
+                  onClick={() => toggleSection('more-tools')}
+                  className={navButtonClass(SECONDARY_TOOLS.some((s) => s.id === activeTab))}
+                  aria-expanded={moreToolsExpanded}
+                  title="More Tools"
+                >
+                  <div className="flex items-center gap-2.5">
+                    {moreToolsExpanded ? (
+                      <ChevronDown className="w-4 h-4 shrink-0 text-zinc-500 dark:text-[#737373]" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 shrink-0 text-zinc-500 dark:text-[#737373]" />
+                    )}
+                    <span>More Tools</span>
                   </div>
-                );
-              })}
-            </div>
+                </button>
+                {moreToolsExpanded &&
+                  SECONDARY_TOOLS.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveTab(item.id)}
+                        className={`${navButtonClass(isActive)} pl-8`}
+                        title={item.label}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Icon
+                            className={`w-3.5 h-3.5 shrink-0 ${
+                              isActive ? 'text-[#111111] dark:text-[#F5F5F5]' : 'text-zinc-500 dark:text-[#737373]'
+                            }`}
+                          />
+                          <span>{item.label}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                <div className="border-t border-[#eaeaea] dark:border-[#262626] mx-1 my-1" />
+              </nav>
+            )}
+
+            {/* Chats */}
+            {chatList}
           </div>
-        )}
-      </div>
 
-      {/* Sidebar Footer */}
-      <div className="border-t border-[#eaeaea] dark:border-[#262626] p-3 flex items-center justify-between select-none shrink-0 bg-white dark:bg-[#0D0D0D]">
-        <div className="flex items-center gap-2 min-w-0">
-          <span
-            className={`w-2 h-2 rounded-full shrink-0 ${
-              serverState === 'RUNNING'
-                ? 'bg-emerald-500 animate-pulse'
-                : serverState === 'STARTING'
-                ? 'bg-amber-400 animate-pulse'
-                : 'bg-zinc-400'
-            }`}
-          />
-          {!isSidebarCollapsed && (
-            <span className="text-xs text-zinc-700 dark:text-[#A1A1AA] font-medium truncate">
-              Local AI Engine
-            </span>
-          )}
-        </div>
+          {/* Sidebar Footer */}
+          <div className="border-t border-[#eaeaea] dark:border-[#262626] p-3 flex items-center justify-between select-none shrink-0 bg-white dark:bg-[#0D0D0D]">
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  serverState === 'RUNNING'
+                    ? 'bg-emerald-500 animate-pulse'
+                    : serverState === 'STARTING'
+                    ? 'bg-amber-400 animate-pulse'
+                    : 'bg-zinc-400'
+                }`}
+              />
+              <span className="text-xs text-zinc-700 dark:text-[#A1A1AA] font-medium truncate">
+                Local AI Engine
+              </span>
+            </div>
 
-        <button
-          onClick={() => setActiveTab('settings')}
-          className="p-1.5 rounded-md text-zinc-400 dark:text-[#A1A1AA] hover:text-zinc-800 dark:hover:text-[#F5F5F5] hover:bg-zinc-100 dark:hover:bg-[#202020] transition-colors"
-          title="Settings & Appearance"
+            <button
+              onClick={() => setActiveTab('settings')}
+              className="p-1.5 rounded-md text-zinc-400 dark:text-[#A1A1AA] hover:text-zinc-800 dark:hover:text-[#F5F5F5] hover:bg-zinc-100 dark:hover:bg-[#202020] transition-colors"
+              title="Settings & Appearance"
+            >
+              <AtomIcon className="w-4 h-4" />
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Chat context menu (right-click or dots) */}
+      {chatMenu && (
+        <div
+          ref={menuRef}
+          role="menu"
+          className="fixed z-50 w-48 rounded-xl bg-white dark:bg-[#141414] border border-[#eaeaea] dark:border-[#262626] shadow-xl py-1.5 text-xs"
+          style={{
+            left: Math.min(chatMenu.x, window.innerWidth - 200),
+            top: Math.min(chatMenu.y, window.innerHeight - 220),
+          }}
         >
-          <Settings className="w-4 h-4" />
-        </button>
-      </div>
+          <button
+            role="menuitem"
+            onClick={() => handleStartRename(chatMenu.conv)}
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-zinc-700 dark:text-[#A1A1AA] hover:bg-zinc-50 dark:hover:bg-[#202020] hover:text-[#111111] dark:hover:text-[#F5F5F5] transition-colors"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+            Rename
+          </button>
+          <button
+            role="menuitem"
+            onClick={() => togglePin(chatMenu.conv)}
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-zinc-700 dark:text-[#A1A1AA] hover:bg-zinc-50 dark:hover:bg-[#202020] hover:text-[#111111] dark:hover:text-[#F5F5F5] transition-colors"
+          >
+            <Pin className={`w-3.5 h-3.5 ${chatMenu.conv.pinned ? 'fill-current' : ''}`} />
+            {chatMenu.conv.pinned ? 'Unpin' : 'Pin'}
+          </button>
+          <div className="border-t border-zinc-100 dark:border-[#222222] my-1" />
+          <button
+            role="menuitem"
+            disabled
+            title="Sharing is not available yet"
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-zinc-400 dark:text-[#52525b] cursor-not-allowed"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            Share
+          </button>
+          <button
+            role="menuitem"
+            disabled
+            title="Archive with restore is not available yet"
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-zinc-400 dark:text-[#52525b] cursor-not-allowed"
+          >
+            <Archive className="w-3.5 h-3.5" />
+            Archive
+          </button>
+          <button
+            role="menuitem"
+            disabled
+            title="Projects are not available yet"
+            className="w-full px-3 py-1.5 text-left flex items-center gap-2.5 text-zinc-400 dark:text-[#52525b] cursor-not-allowed"
+          >
+            <FolderInput className="w-3.5 h-3.5" />
+            Move to project
+          </button>
+          <div className="border-t border-zinc-100 dark:border-[#222222] my-1" />
+          <button
+            role="menuitem"
+            onClick={() => handleDelete(chatMenu.conv)}
+            className={`w-full px-3 py-1.5 text-left flex items-center gap-2.5 transition-colors ${
+              chatMenu.confirmingDelete
+                ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-medium'
+                : 'text-zinc-700 dark:text-[#A1A1AA] hover:bg-zinc-50 dark:hover:bg-[#202020] hover:text-rose-600'
+            }`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            {chatMenu.confirmingDelete ? 'Confirm delete' : 'Delete'}
+          </button>
+        </div>
+      )}
     </aside>
   );
 };
