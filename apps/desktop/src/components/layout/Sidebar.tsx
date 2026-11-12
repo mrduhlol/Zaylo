@@ -1,3 +1,4 @@
+import { ChatMemoryInspector } from '../../features/conversations/ChatMemoryInspector';
 import { exportChatPdf } from '../../api/exportChatPdf';
 import { themeArtwork } from '../../theme/artwork';
 import React, { useLayoutEffect, useEffect, useMemo, useRef, useState } from 'react';
@@ -96,8 +97,9 @@ export const Sidebar: React.FC = () => {
   const { projects, selectProject } = useProjects();
   const [menuSection, setMenuSection] = useState<'project' | 'branch' | null>(null);
   const [notice, setNotice] = useState('');
+  const [memoryChat, setMemoryChat] = useState<SidebarConversation | null>(null);
   const { builderMode, collapsedSections, toggleSection, themeFamily } = useWorkspacePreferences();
-  const headerArtwork = themeArtwork[themeFamily];
+  const headerArtwork = themeArtwork[themeFamily] || themeArtwork.iris;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
@@ -590,6 +592,7 @@ export const Sidebar: React.FC = () => {
               onClick={() => setActiveTab('settings')}
               className="p-1.5 rounded-md text-zinc-400 dark:text-[#A1A1AA] hover:text-zinc-800 dark:hover:text-[#F5F5F5] hover:bg-zinc-100 dark:hover:bg-[#202020] transition-colors"
               title="Settings & Appearance"
+              aria-label="Settings"
             >
               <AtomIcon className="w-4 h-4" />
             </button>
@@ -597,6 +600,7 @@ export const Sidebar: React.FC = () => {
         </>
       )}
 
+      {memoryChat && <ChatMemoryInspector key={memoryChat.id} conversationId={memoryChat.id} title={memoryChat.title} temporary={memoryChat.temporary} onClose={() => setMemoryChat(null)} />}
       {undoAction && <div role="status" className="fixed bottom-5 left-4 z-50 flex gap-4 items-center rounded-lg p-3 shadow-lg bg-[var(--card)] text-[var(--foreground)] text-sm"><span>{undoAction.label}</span><button onClick={undoChatAction} className="underline font-semibold">Undo</button><button aria-label="Dismiss undo" onClick={() => useAppStore.setState({ undoAction: undefined })}><X className="w-4 h-4" /></button></div>}
       {notice && <div role="status" className="fixed bottom-20 left-4 z-50 rounded-lg p-3 bg-[var(--card)] text-[var(--foreground)] text-sm">{notice}<button aria-label="Dismiss message" className="ml-3 underline" onClick={() => setNotice('')}>Dismiss</button></div>}
       {/* Chat context menu (right-click or dots) */}
@@ -606,6 +610,7 @@ export const Sidebar: React.FC = () => {
           role="menu"
           className="fixed z-50 w-64 max-h-[70vh] overflow-auto rounded-xl bg-[var(--background)] text-[var(--foreground)] border border-current/20 shadow-xl py-1.5 text-xs"
           onKeyDown={event => {
+            if (event.key === 'Tab') { setChatMenu(null); return; }
             if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
             event.preventDefault();
             const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
@@ -672,7 +677,8 @@ export const Sidebar: React.FC = () => {
           <div className="px-3 py-2 space-y-2 border-y border-current/10">
             <label className="flex gap-2"><input type="checkbox" checked={conversations.find(c => c.id === chatMenu.conv.id)?.memoryEnabled !== false} onChange={event => updateChatOptions(chatMenu.conv.id, { memoryEnabled: event.target.checked })} />Recall memory in this chat</label>
             <label className="flex gap-2"><input type="checkbox" checked={conversations.find(c => c.id === chatMenu.conv.id)?.memorySaveEnabled !== false} onChange={event => updateChatOptions(chatMenu.conv.id, { memorySaveEnabled: event.target.checked })} />Save this chat to memory</label>
-            <p className="text-[var(--muted-foreground)]">Changes apply to future requests. Existing memories remain in LoftyDB.</p>
+            <p className="text-[var(--muted-foreground)]">Changes apply to future requests. Existing memories remain saved.</p>
+            <button role="menuitem" className="underline underline-offset-4 text-[var(--foreground)]" onClick={() => { setMemoryChat(chatMenu.conv); setChatMenu(null); }}>Inspect saved memories</button>
           </div>
           {chatMenu.conv.messages.length > 0 && <button role="menuitem" className="w-full px-3 py-2 text-left" onClick={() => setMenuSection(menuSection === 'branch' ? null : 'branch')}>Branch from message…</button>}
           {menuSection === 'branch' && <div className="px-3 space-y-2">{chatMenu.conv.messages.map((message, index) => <button key={index} role="menuitem" className="block w-full text-left truncate py-1 underline" onClick={() => { branchConversation(chatMenu.conv.id, index); setChatMenu(null); }}>{index + 1}. {message.role}: {typeof message.content === 'string' ? message.content.slice(0, 70) : 'Message with attachments'}</button>)}</div>}
