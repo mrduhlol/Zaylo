@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell, BrowserWindow } from 'electron';
+import { app, ipcMain, dialog, shell, BrowserWindow } from 'electron';
 import type { IPCChannels, IPCEvents } from '@local-ai/protocol';
 import { createDatabaseAsync, ServerRepository, ModelRepository, APIKeyRepository, DeviceRepository, MetricsRepository, LogsRepository, BenchmarkRepository, DocumentRepository, TrainingJobRepository, FineTunedModelRepository, SettingsRepository } from '@local-ai/database';
 import { registerLoftyDbHandlers } from '../loftydb/registerLoftyDbHandlers.js';
@@ -563,20 +563,37 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow) {
   });
 
   // 8. Inference Playground
+  const pendingInference = new Map<string, AbortController>();
   handle('inference:chat', async (req) => {
-    if (req.stream) {
-      const chunks = inferenceService.chatStream(req, '127.0.0.1');
-      let finalResponse: any = null;
-      for await (const chunk of chunks) {
-        sendEvent('inference:chunk', { requestId: chunk.id, chunk });
-        finalResponse = chunk;
-      }
-      return finalResponse;
+    const { clientRequestId, ...request } = req;
+    if (clientRequestId !== undefined &&
+        (typeof clientRequestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientRequestId))) {
+      throw new Error('clientRequestId must be a UUID v4');
     }
-    return inferenceService.chat(req, '127.0.0.1');
+    if (clientRequestId && pendingInference.has(clientRequestId)) {
+      throw new Error('clientRequestId is already active');
+    }
+    const controller = new AbortController();
+    if (clientRequestId) pendingInference.set(clientRequestId, controller);
+    try {
+      if (request.stream) {
+        const chunks = inferenceService.chatStream(request, '127.0.0.1', controller.signal);
+        let finalResponse: any = null;
+        for await (const chunk of chunks) {
+          sendEvent('inference:chunk', { requestId: clientRequestId ?? chunk.id, chunk });
+          finalResponse = chunk;
+        }
+        return finalResponse;
+      }
+      return await inferenceService.chat(request, '127.0.0.1', controller.signal);
+    } finally {
+      if (clientRequestId) pendingInference.delete(clientRequestId);
+    }
   });
 
   handle('inference:abort', async ({ requestId }) => {
+    const controller = pendingInference.get(requestId);
+    if (controller) { controller.abort(); return true; }
     return inferenceService.abortRequest(requestId);
   });
 
@@ -945,7 +962,7 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow) {
 
   // 12. App & System
   handle('app:get-version', async () => {
-    return '3.2.0';
+    return app.getVersion();
   });
 
   handle('app:select-directory', async ({ defaultPath }) => {
@@ -969,6 +986,8 @@ export async function registerIpcHandlers(mainWindow: BrowserWindow) {
   });
 
   return async () => {
+    for (const controller of pendingInference.values()) controller.abort();
+    pendingInference.clear();
     monitor.stop();
     await cleanupLoftyDb().catch(() => {});
     if (apiServer) {
