@@ -1,3 +1,4 @@
+import { collapsedTitlebarInsets } from '../../../components/layout/titlebar';
 import React, { useState, useRef, useEffect } from 'react';
 import * as Select from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
@@ -91,7 +92,7 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
   }, []);
 
   return (
-    <div style={{ paddingLeft: isSidebarCollapsed ? 48 : undefined }} className="min-h-16 px-3 sm:px-6 py-3 gap-2 border-b border-[var(--border)] bg-[var(--background)] flex items-center justify-between select-none shrink-0 z-20">
+    <div style={{ paddingLeft: isSidebarCollapsed ? collapsedTitlebarInsets().contentLeft : undefined }} className="zaylo-titlebar min-h-16 px-3 sm:px-6 py-3 gap-2 border-b border-[var(--border)] bg-[var(--background)] flex items-center justify-between select-none shrink-0 z-20">
       {/* Left Controls: Model Pill & Persona Pill */}
       <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         {/* Model Selector Pill */}
