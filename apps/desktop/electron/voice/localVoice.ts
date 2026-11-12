@@ -31,6 +31,7 @@ export function decodeVoiceAudio(base64: unknown): Buffer {
 export class LocalVoice {
   private setupPromise?: Promise<void>;
   private active?: AbortController;
+  private generation = 0;
   private readonly root: string;
   private readonly python: string;
   private readonly models: string;
@@ -68,7 +69,9 @@ export class LocalVoice {
     return { ready: ready && pythonExists, installing: Boolean(this.setupPromise), model: 'Whisper tiny · local CPU' };
   }
   async setup(): Promise<void> {
+    const generation = this.generation;
     if ((await this.status()).ready) return;
+    if (generation !== this.generation) throw new Error('Voice setup cancelled.');
     if (this.setupPromise) return this.setupPromise;
     if (this.active) throw new Error('Another voice operation is still running.');
     const controller = new AbortController(); this.active = controller;
@@ -91,8 +94,10 @@ export class LocalVoice {
     try { await this.setupPromise; } finally { this.setupPromise = undefined; if (this.active === controller) this.active = undefined; }
   }
   async transcribe(base64: unknown): Promise<{ text: string; language: string }> {
+    const generation = this.generation;
     const audio = decodeVoiceAudio(base64);
     if (!(await this.status()).ready) throw new Error('Set up the local voice model first.');
+    if (generation !== this.generation) throw new Error('Local voice operation cancelled.');
     if (this.active) throw new Error('Another voice operation is still running.');
     const controller = new AbortController(); this.active = controller;
     let directory: string | undefined;
@@ -111,5 +116,5 @@ export class LocalVoice {
       finally { if (this.active === controller) this.active = undefined; }
     }
   }
-  cancel(): void { this.active?.abort(); }
+  cancel(): void { this.generation++; this.active?.abort(); }
 }
