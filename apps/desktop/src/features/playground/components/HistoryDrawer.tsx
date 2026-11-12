@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   History,
   Plus,
@@ -32,7 +32,11 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
   onDelete,
   onClose,
 }) => {
-  const { loftyDbStatus } = useAppStore();
+  const { loftyDbStatus, deletedChats } = useAppStore();
+  const visibleHistory = useMemo(() => {
+    const deleted = new Set(deletedChats.map(chat => chat.id));
+    return conversations.filter(chat => !chat.temporary && !chat.archivedAt && !deleted.has(chat.id));
+  }, [conversations, deletedChats]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -45,27 +49,32 @@ export const HistoryDrawer: React.FC<HistoryDrawerProps> = ({
       return;
     }
 
+    let cancelled = false;
     const timer = setTimeout(() => {
       if (loftyDbStatus?.connected) {
         void api
           .invoke('memory:search-conversations', { query: q, limit: 20 })
-          .then((res) => setSearchResults((res as PlaygroundConversation[]) || []))
+          .then((res) => { if (!cancelled) setSearchResults((res as PlaygroundConversation[]) || []); })
           .catch(() => {
+            if (cancelled) return;
             setSearchResults(
-              conversations.filter((c) => c.title.toLowerCase().includes(q.toLowerCase()))
+              visibleHistory.filter((c) => c.title.toLowerCase().includes(q.toLowerCase()))
             );
           });
       } else {
         setSearchResults(
-          conversations.filter((c) => c.title.toLowerCase().includes(q.toLowerCase()))
+          visibleHistory.filter((c) => c.title.toLowerCase().includes(q.toLowerCase()))
         );
       }
     }, 200);
 
-    return () => clearTimeout(timer);
-  }, [searchQuery, conversations, loftyDbStatus?.connected]);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [searchQuery, visibleHistory, loftyDbStatus?.connected]);
 
-  const displayedConversations = searchResults ?? conversations;
+  const displayedConversations = (searchResults ?? visibleHistory).filter(chat => {
+    const local = conversations.find(item => item.id === chat.id) || chat;
+    return !local.temporary && !local.archivedAt && !deletedChats.some(item => item.id === chat.id);
+  });
 
   const startRename = (conv: PlaygroundConversation, e: React.MouseEvent) => {
     e.stopPropagation();
