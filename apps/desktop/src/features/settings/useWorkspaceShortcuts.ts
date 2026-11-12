@@ -26,10 +26,14 @@ export function useWorkspaceShortcuts(actions: Partial<Record<WorkspaceShortcutA
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.repeat || event.keyCode === 229) return;
       const target = event.target;
-      if (target instanceof Element && target.closest('input, textarea, select, [contenteditable="true"], [role="combobox"], [data-shortcut-capture]')) return;
+      if (target instanceof Element && target.closest('select, [contenteditable="true"], [role="combobox"], [data-shortcut-capture]')) return;
       const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
       if ((isMac && event.ctrlKey) || (!isMac && event.metaKey)) return;
       const shortcut = shortcutFromEvent(event);
+      const textInput = target instanceof Element && Boolean(target.closest('input, textarea'));
+      const editing = new Set(['Mod+A', 'Mod+C', 'Mod+V', 'Mod+X', 'Mod+Z', 'Mod+Shift+Z', 'Mod+Y']);
+      if (textInput && (!shortcut?.startsWith('Mod+') || editing.has(shortcut))) return;
+      if (event.getModifierState?.('AltGraph')) return;
       const action = Object.keys(keybindings).find(key => keybindings[key].toLowerCase() === shortcut?.toLowerCase());
       if (action && actions[action]) { event.preventDefault(); actions[action]?.(); }
     };
