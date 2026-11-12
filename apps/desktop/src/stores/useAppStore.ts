@@ -1,3 +1,4 @@
+import { useWorkspacePreferences } from './useWorkspacePreferences';
 import { ModelCapabilityRegistry } from '@local-ai/capabilities';
 import { create } from 'zustand';
 import { api } from '../api/client';
@@ -283,7 +284,18 @@ const getInitialTheme = (): 'dark' | 'light' => {
 
 const PLAYGROUND_STORAGE_KEY = 'zaylo_playground_conversations_v3';
 
-function loadStoredConversations(initialPersonaId?: string): { conversations: PlaygroundConversation[]; activeConvId: string } {
+/** All fresh-chat paths share default persona/greeting and privacy initialization. */
+function freshConversation(persona: Pick<Persona, 'id' | 'greetingMessage'> | undefined, model = '', options?: { temporary?: boolean; projectId?: string }): PlaygroundConversation {
+  const now = Date.now();
+  return {
+    id: `conv_${crypto.randomUUID()}`, title: options?.temporary ? 'Temporary chat' : 'New Chat',
+    modelId: model, modelName: model, personaId: persona?.id,
+    messages: persona?.greetingMessage ? [{ role: 'assistant', content: persona.greetingMessage }] : [],
+    createdAt: now, updatedAt: now, temporary: options?.temporary, projectId: options?.projectId,
+  };
+}
+
+function loadStoredConversations(): { conversations: PlaygroundConversation[]; activeConvId: string } {
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       const saved = localStorage.getItem(PLAYGROUND_STORAGE_KEY);
@@ -300,18 +312,8 @@ function loadStoredConversations(initialPersonaId?: string): { conversations: Pl
       // Ignored
     }
   }
-  const initialId = `conv_${Date.now()}`;
-  const initialConv: PlaygroundConversation = {
-    id: initialId,
-    title: 'New Chat',
-    modelId: '',
-    modelName: '',
-    messages: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    personaId: initialPersonaId || 'persona_general',
-  };
-  return { conversations: [initialConv], activeConvId: initialId };
+  const initialConv = freshConversation(personaManager.getDefaultPersona());
+  return { conversations: [initialConv], activeConvId: initialConv.id };
 }
 
 function loadLocal<T>(key: string, fallback: T): T {
@@ -322,9 +324,8 @@ function storeLocal(key: string, value: unknown) {
 }
 
 const initialConvsData = loadStoredConversations();
-if (!initialConvsData.activeConvId || !initialConvsData.conversations.some(chat => !chat.archivedAt && !chat.temporary && !chat.messages.some(message => message.role === 'user'))) {
-  const now = Date.now();
-  const fresh: PlaygroundConversation = { id: `conv_${crypto.randomUUID()}`, title: 'New Chat', modelId: '', modelName: '', messages: [], createdAt: now, updatedAt: now };
+if (!initialConvsData.activeConvId || (useWorkspacePreferences.getState().startupBehavior === 'new-chat' && !initialConvsData.conversations.some(chat => !chat.archivedAt && !chat.temporary && !chat.messages.some(message => message.role === 'user')))) {
+  const fresh = freshConversation(personaManager.getDefaultPersona());
   initialConvsData.conversations.unshift(fresh);
   if (!initialConvsData.activeConvId) initialConvsData.activeConvId = fresh.id;
 }
@@ -352,23 +353,9 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
   createNewChat: (options) => {
     const state = get();
-    const newId = `conv_${crypto.randomUUID()}`;
     const initialPersona = PersonaResolver.resolve(options?.personaId || state.defaultPersonaId, state.personas, state.defaultPersonaId);
-    const initialMessages: ChatMessage[] = initialPersona?.greetingMessage
-      ? [{ role: 'assistant', content: initialPersona.greetingMessage }]
-      : [];
-    const newConv: PlaygroundConversation = {
-      id: newId,
-      title: options?.temporary ? 'Temporary chat' : 'New Chat',
-      temporary: options?.temporary,
-      projectId: options?.projectId,
-      modelId: state.selectedModel || '',
-      modelName: state.selectedModel || '',
-      messages: initialMessages,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      personaId: initialPersona?.id,
-    };
+    const newConv = freshConversation(initialPersona, state.selectedModel || '', options);
+    const newId = newConv.id;
     const nextConvs = [newConv, ...state.conversations];
     try {
       localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(savedHistory(nextConvs)));
