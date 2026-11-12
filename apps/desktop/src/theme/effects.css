@@ -1,0 +1,144 @@
+/*
+ * Zaylo appearance effects: translucent glass, theme inner glows,
+ * animation intensity and reduced-motion handling.
+ *
+ * These are CSS hooks driven from the app root attributes set by
+ * theme/index.ts:
+ *   data-translucent="true|false"     optional glass surfaces
+ *   style="--zaylo-opacity: 0..1"     workspace opacity for glass
+ *   style="--zaylo-motion: 0..1"      animation intensity multiplier
+ *   prefers-reduced-motion            static fallback always honored
+ *
+ * Transparency honesty: real desktop window transparency is owned by the
+ * Electron/main process. These hooks only style in-app surfaces with
+ * backdrop-filter. When the platform (or Electron) does not support it,
+ * the @supports fallback keeps surfaces fully opaque — never a fake
+ * wallpaper image.
+ */
+
+:root {
+  /* Workspace surface opacity when translucent is enabled (0.65-1). */
+  --zaylo-opacity: 0.9;
+  /* Animation intensity multiplier (0-1). */
+  --zaylo-motion: 0.5;
+}
+
+/* ============================================================
+   Translucent glass surfaces (opt-in)
+   ============================================================ */
+
+[data-translucent='true'] aside,
+[data-translucent='true'] header,
+[data-translucent='true'] .zaylo-glass {
+  background-color: color-mix(
+    in srgb,
+    var(--sidebar-bg) calc(var(--zaylo-opacity) * 100%),
+    transparent
+  );
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+}
+
+[data-translucent='true'][data-theme='light'] aside,
+[data-translucent='true'][data-theme='light'] header,
+[data-translucent='true'][data-theme='light'] .zaylo-glass {
+  background-color: color-mix(
+    in srgb,
+    var(--sidebar-bg) calc(var(--zaylo-opacity) * 100%),
+    transparent
+  );
+}
+
+/* Honest fallback: no backdrop-filter support -> fully opaque surfaces.
+   Chat text readability is never traded for translucency. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-translucent='true'] aside,
+  [data-translucent='true'] header,
+  [data-translucent='true'] .zaylo-glass {
+    background-color: var(--sidebar-bg) !important;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* ============================================================
+   Theme-colored inner glows
+   ============================================================
+   Hooks for surfaces owned by other tracks:
+     .zaylo-glow            generic accent inner-glow surface
+     .zaylo-glow-hover      activates on hover/focus-visible (New chat)
+     .zaylo-composer-glow   composer container
+   Light mode uses the deeper --theme-glow-strong triplet as mandated.
+   ============================================================ */
+
+:root {
+  --zaylo-glow-color: rgb(var(--theme-glow) / 0.35);
+}
+
+[data-theme='light'] {
+  --zaylo-glow-color: rgb(var(--theme-glow-strong) / 0.55);
+}
+
+.zaylo-glow,
+.zaylo-composer-glow {
+  box-shadow: inset 0 0 0 1px rgb(var(--theme-glow) / 0.18),
+    inset 0 1px 24px -6px var(--zaylo-glow-color);
+}
+
+.zaylo-glow-hover:hover,
+.zaylo-glow-hover:focus-visible {
+  box-shadow: inset 0 0 0 1px rgb(var(--theme-glow) / 0.32),
+    inset 0 0 22px -4px var(--zaylo-glow-color),
+    inset 0 2px 40px -8px rgb(var(--theme-glow) / 0.28);
+}
+
+/* Composer: stronger resting glow so it reads as the primary surface. */
+.zaylo-composer-glow {
+  box-shadow: inset 0 0 0 1px rgb(var(--theme-glow) / 0.24),
+    inset 0 2px 32px -8px var(--zaylo-glow-color);
+}
+
+.zaylo-composer-glow:focus-within {
+  box-shadow: inset 0 0 0 1px rgb(var(--theme-glow) / 0.4),
+    inset 0 2px 40px -6px var(--zaylo-glow-color);
+}
+
+/* Recording bar / voice surfaces reuse the same accent language. */
+.zaylo-recording-glow {
+  box-shadow: inset 0 0 0 1px rgb(var(--theme-glow) / 0.45),
+    inset 0 2px 48px -6px var(--zaylo-glow-color);
+}
+
+/* ============================================================
+   Motion: intensity multiplier + reduced-motion static fallback
+   ============================================================
+   Keyframes defined elsewhere can scale amplitude by multiplying
+   transforms with calc(var(--zaylo-motion) * <n>). This file only
+   provides the global kill-switch and ready-made scaling utility.
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Opt-in fully-static mode driven by animationsEnabled preference. */
+[data-motion='off'] *,
+[data-motion='off'] *::before,
+[data-motion='off'] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Smooth programmatic scroll target (conversation minimap jumps). */
+@media (prefers-reduced-motion: no-preference) {
+  [data-motion='on'] .zaylo-scroll-smooth {
+    scroll-behavior: smooth;
+  }
+}
