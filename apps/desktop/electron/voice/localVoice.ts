@@ -4,6 +4,8 @@ import path from 'node:path';
 import os from 'node:os';
 
 const ASR_VERSION = '1.2.1';
+const AUDIO_DECODER_VERSION = '16.0.1';
+export const VOICE_RUNTIME_VERSION = `faster-whisper=${ASR_VERSION};av=${AUDIO_DECODER_VERSION}`;
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 const setupScript = `from faster_whisper import WhisperModel
 import sys
@@ -64,7 +66,7 @@ export class LocalVoice {
     });
   }
   async status(): Promise<{ ready: boolean; installing: boolean; model: string }> {
-    const ready = await fs.access(path.join(this.root, 'ready')).then(() => true, () => false);
+    const ready = await fs.readFile(path.join(this.root, 'ready'), 'utf8').then(value => value.trim() === VOICE_RUNTIME_VERSION, () => false);
     const pythonExists = await fs.access(this.python).then(() => true, () => false);
     return { ready: ready && pythonExists, installing: Boolean(this.setupPromise), model: 'Whisper tiny · local CPU' };
   }
@@ -78,7 +80,7 @@ export class LocalVoice {
     this.setupPromise = (async () => {
       await fs.mkdir(this.root, { recursive: true, mode: 0o700 });
       let python: string | undefined;
-      for (const candidate of process.platform === 'win32' ? ['py', 'python', 'python3'] : ['python3', 'python']) {
+      for (const candidate of process.platform === 'win32' ? ['py', 'python', 'python3'] : ['python3.13', 'python3.12', 'python3.11', 'python3', 'python']) {
         try {
           await this.run(candidate, ['-c', 'import sys; assert (3,9) <= sys.version_info[:2] < (3,14)'], controller.signal, true, 10000);
           python = candidate; break;
@@ -86,10 +88,10 @@ export class LocalVoice {
       }
       if (!python) throw new Error('Install Python 3.9–3.13 with venv support, then retry local voice setup.');
       await this.run(python, ['-m', 'venv', path.join(this.root, 'venv')], controller.signal);
-      await this.run(this.python, ['-m', 'pip', 'install', '--disable-pip-version-check', `faster-whisper==${ASR_VERSION}`], controller.signal, false, 900000);
+      await this.run(this.python, ['-m', 'pip', 'install', '--disable-pip-version-check', `faster-whisper==${ASR_VERSION}`, `av==${AUDIO_DECODER_VERSION}`], controller.signal, false, 900000);
       await fs.mkdir(this.models, { recursive: true, mode: 0o700 });
       await this.run(this.python, ['-c', setupScript, this.models], controller.signal, false, 900000);
-      await fs.writeFile(path.join(this.root, 'ready'), `${ASR_VERSION}\n`, { mode: 0o600 });
+      await fs.writeFile(path.join(this.root, 'ready'), `${VOICE_RUNTIME_VERSION}\n`, { mode: 0o600 });
     })();
     try { await this.setupPromise; } finally { this.setupPromise = undefined; if (this.active === controller) this.active = undefined; }
   }
