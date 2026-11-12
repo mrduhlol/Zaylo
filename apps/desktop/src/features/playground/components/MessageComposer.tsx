@@ -16,6 +16,7 @@ import {
   Palette,
   Brain,
 } from 'lucide-react';
+import { useWorkspacePreferences } from '../../../stores/useWorkspacePreferences';
 import { chatDrafts } from '../hooks/chatSession';
 import { VoiceInput } from '../../voice/VoiceInput';
 import type { ServerState } from '@local-ai/shared';
@@ -77,6 +78,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   onOpenChartModal,
   onOpenPresentationModal,
 }) => {
+  const builderMode = useWorkspacePreferences((state) => state.builderMode);
   const [voiceContainer, setVoiceContainer] = useState<HTMLDivElement | null>(null);
   const [voiceActive, setVoiceActive] = useState(false);
   const [input, setInput] = useState(() => chatDrafts.get(conversationId)?.text || '');
@@ -86,7 +88,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   useEffect(() => {
     if (!isToolsOpen) return;
     const dismiss = (e: PointerEvent) => { if (!toolsRef.current?.contains(e.target as Node)) setIsToolsOpen(false); };
-    const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsToolsOpen(false); };
+    const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') { setIsToolsOpen(false); toolsRef.current?.querySelector('button')?.focus(); } };
     document.addEventListener('pointerdown', dismiss); document.addEventListener('keydown', escape);
     return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', escape); };
   }, [isToolsOpen]);
@@ -178,10 +180,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       <div className="w-full max-w-[950px] space-y-2">
         {/* Server Stopped Warning Banner */}
         {!isServerRunning && (
-          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-600 dark:text-amber-300">
+          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center flex-wrap gap-2 justify-between text-xs text-amber-600 dark:text-amber-300">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-              <span>Inference server is currently stopped. Start server to chat with this model.</span>
+              <span>Your local model is stopped. Start it to continue chatting.</span>
             </div>
             <button
               onClick={onStartServer}
@@ -196,7 +198,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5" />
-                  <span>Start Server</span>
+                  <span>Start model</span>
                 </>
               )}
             </button>
@@ -247,7 +249,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             onPaste={handlePaste}
             placeholder={
               !isServerRunning
-                ? 'Server stopped. Start server to chat...'
+                ? 'Start your local model to chat…'
                 : 'Ask anything...'
             }
             disabled={!isServerRunning}
@@ -265,7 +267,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
           {/* Bottom Controls Row inside Composer */}
           <div className="flex items-center justify-between pt-2 border-t border-transparent select-none">
             {/* Left Tools: Plus, Paperclip, RAG toggle */}
-            <div className="flex items-center gap-2.5 text-[var(--muted-foreground)]">
+            <div className="flex flex-wrap items-center gap-2.5 text-[var(--muted-foreground)]">
               {/* Plus Action */}
               <div ref={toolsRef} className="relative">
                 <button
@@ -280,7 +282,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
                 {isToolsOpen && (
                   <div className="absolute bottom-full mb-2 left-0 w-56 rounded-xl bg-[var(--card)] border border-[var(--border)] shadow-xl py-1.5 z-50 text-xs">
-                    <button
+                    {onOpenChartModal && <button
                       type="button"
                       onClick={() => {
                         onOpenChartModal?.();
@@ -289,9 +291,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >
                       <BarChart2 className="w-3.5 h-3.5 text-zinc-500" />
-                      <span>Generate AI Chart</span>
-                    </button>
-                    <button
+                      <span>Create chart</span>
+                    </button>}
+                    {onOpenPresentationModal && <button
                       type="button"
                       onClick={() => {
                         onOpenPresentationModal?.();
@@ -300,8 +302,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >
                       <Presentation className="w-3.5 h-3.5 text-zinc-500" />
-                      <span>Create Presentation (.pptx)</span>
-                    </button>
+                      <span>Create presentation</span>
+                    </button>}
                     <button
                       type="button"
                       onClick={() => {
@@ -347,7 +349,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-[var(--accent)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                     >
                       <FileText className="w-3.5 h-3.5" />
-                      <span>Manage RAG Library</span>
+                      <span>{builderMode ? 'Manage RAG library' : 'Document library'}</span>
                     </button>
                   </div>
                 )}
@@ -358,13 +360,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="p-1 rounded-md hover:bg-[var(--accent)] hover:text-[var(--foreground)] transition-colors"
-                title="Attach image"
+                title="Attach image" aria-label="Attach image"
               >
                 <Paperclip className="w-4 h-4" />
               </button>
 
               {/* RAG Label & Toggle Switch */}
-              <div className="flex items-center gap-1.5 pl-1">
+              {builderMode && <div className="flex items-center gap-1.5 pl-1">
                 <button
                   type="button"
                   onClick={onOpenRagModal}
@@ -394,10 +396,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                     }`}
                   />
                 </button>
-              </div>
+              </div>}
 
               {/* LoftyDB Memory Label & Toggle Switch */}
-              <div className="flex items-center gap-1.5 pl-1">
+              {builderMode && <div className="flex items-center gap-1.5 pl-1">
                 <button
                   type="button"
                   onClick={() => onOpenMemorySection?.()}
@@ -439,7 +441,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                     }`}
                   />
                 </button>
-              </div>
+              </div>}
             </div>
 
             {/* Right Control: Black/White Send / Stop Button */}
@@ -464,8 +466,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   type="button"
                   onClick={() => handleSubmit()}
                   disabled={(!input.trim() && !pendingImage) || !isServerRunning}
-                  className="w-8 h-8 rounded-xl bg-[var(--foreground)] text-white dark:text-black hover:bg-neutral-800 dark:hover:bg-neutral-200 disabled:opacity-30 disabled:hover:bg-black dark:disabled:hover:bg-white flex items-center justify-center transition-transform active:scale-95 shadow-sm"
-                  title="Send prompt (Enter)"
+                  className="w-8 h-8 rounded-xl bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 disabled:opacity-30 flex items-center justify-center transition-transform active:scale-95 shadow-sm"
+                  aria-label="Send message" title="Send prompt (Enter)"
                 >
                   <SendHorizonal className="w-4 h-4" />
                 </button>
