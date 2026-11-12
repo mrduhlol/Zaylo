@@ -484,22 +484,13 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
   };
 
   const handleSaveMessageToMemory = async (text: string) => {
-    if (!text.trim() || !loftyDbStatus?.connected || !maySaveMemory(privacy)) return;
-    try {
-      await saveMemory({
-        content: text.trim().slice(0, 600),
-        category: 'context',
-        scope: 'global',
-        conversationId: activeConvId,
-        personaId: activeConvPersona?.id,
-        importance: 4,
-        pinned: false,
-        tags: ['chat-saved'],
-        source: 'chat',
-      });
-    } catch (err: any) {
-      console.warn('Failed to save message to LoftyDB memory:', err);
-    }
+    if (!text.trim() || !loftyDbStatus?.connected || !maySaveMemory(privacy)) throw new Error('Memory saving is unavailable for this chat.');
+    const saved = await saveMemory({
+      content: text.trim().slice(0, 600), category: 'context', scope: 'global',
+      conversationId: activeConvId, personaId: activeConvPersona?.id, importance: 4,
+      pinned: false, tags: ['chat-saved'], source: 'chat',
+    });
+    if (!saved?.id) throw new Error('The memory service did not confirm this save. Please try again.');
   };
 
   // Chat Submission & Streaming Execution
