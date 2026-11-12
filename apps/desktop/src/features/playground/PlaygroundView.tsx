@@ -564,7 +564,8 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
 
     setIsGenerating(true);
     stopRequestedRef.current = false;
-    streamRequestIdRef.current = null;
+    const clientRequestId = crypto.randomUUID();
+    streamRequestIdRef.current = clientRequestId;
     activeStreamContentRef.current = '';
     streamTokenCountRef.current = 0;
     streamStartTimeRef.current = performance.now();
@@ -576,7 +577,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
     let retrievedSources: ChatMessage['sources'];
     // Listen to real streamed token chunks
     const unsubChunk = api.on('inference:chunk', (data: { requestId: string; chunk: ChatCompletionResponse }) => {
-      streamRequestIdRef.current = data.requestId;
+      if (data.requestId !== clientRequestId) return;
       if (stopRequestedRef.current) { void api.invoke('inference:abort', { requestId: data.requestId }); return; }
       if (data.chunk.sources) retrievedSources = data.chunk.sources;
       const delta = data.chunk.choices[0]?.delta?.content;
@@ -624,6 +625,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
 
     try {
       const response = await api.invoke('inference:chat', {
+        clientRequestId,
         model: activeModel?.name || 'default',
         messages: payloadMessages,
         temperature: settings.temperature,
