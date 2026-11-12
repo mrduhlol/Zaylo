@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -211,6 +211,29 @@ describe('ApiServer', () => {
     expect(text).toContain('[DONE]');
     expect(text).toContain('Local');
     expect(text).toContain('Response.');
+  });
+
+  it('cancels local generation when the SSE response client disconnects', async () => {
+    let aborted = false;
+    const stream = vi.spyOn(MockRuntime.prototype, 'chatStream').mockImplementation(async function* (_request: ChatCompletionRequest, signal?: AbortSignal) {
+      yield createChatCompletionChunk('disconnect-test', 'Mock Model 7B', 'Started');
+      await new Promise<void>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => { aborted = true; reject(signal.reason); }, { once: true });
+      });
+    });
+    const controller = new AbortController();
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+        method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'default', messages: [{ role: 'user', content: 'Continue until stopped' }], stream: true }),
+      });
+      expect(response.status).toBe(200);
+      const reader = response.body!.getReader();
+      expect((await reader.read()).done).toBe(false);
+      controller.abort();
+      await reader.cancel().catch(() => {});
+      await vi.waitFor(() => expect(aborted).toBe(true));
+    } finally { controller.abort(); stream.mockRestore(); }
   });
 
   it.each([
