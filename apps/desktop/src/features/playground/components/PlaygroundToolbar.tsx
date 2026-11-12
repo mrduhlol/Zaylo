@@ -64,7 +64,7 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
   onClearConversation,
 }) => {
   const builderMode = useWorkspacePreferences((state) => state.builderMode);
-  const { theme, toggleTheme, startServer, stopServer, setActiveTab } = useAppStore();
+  const { theme, toggleTheme, startServer, stopServer, setActiveTab, isSidebarCollapsed } = useAppStore();
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
   const modelDropdownRef = useRef<HTMLDivElement>(null);
@@ -91,7 +91,7 @@ export const PlaygroundToolbar: React.FC<PlaygroundToolbarProps> = ({
   }, []);
 
   return (
-    <div className="min-h-16 px-3 sm:px-6 py-3 gap-2 border-b border-[var(--border)] bg-[var(--background)] flex items-center justify-between select-none shrink-0 z-20">
+    <div style={{ paddingLeft: isSidebarCollapsed ? 48 : undefined }} className="min-h-16 px-3 sm:px-6 py-3 gap-2 border-b border-[var(--border)] bg-[var(--background)] flex items-center justify-between select-none shrink-0 z-20">
       {/* Left Controls: Model Pill & Persona Pill */}
       <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         {/* Model Selector Pill */}
