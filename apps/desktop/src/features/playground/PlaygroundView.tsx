@@ -573,10 +573,12 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
     const reqId = `chatcmpl-${Date.now()}`;
     setActiveRequestId(reqId);
 
+    let retrievedSources: ChatMessage['sources'];
     // Listen to real streamed token chunks
     const unsubChunk = api.on('inference:chunk', (data: { requestId: string; chunk: ChatCompletionResponse }) => {
       streamRequestIdRef.current = data.requestId;
       if (stopRequestedRef.current) { void api.invoke('inference:abort', { requestId: data.requestId }); return; }
+      if (data.chunk.sources) retrievedSources = data.chunk.sources;
       const delta = data.chunk.choices[0]?.delta?.content;
       if (delta) {
         if (!firstTokenTimeRef.current) {
@@ -611,6 +613,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
               msgs[msgs.length - 1] = {
                 role: 'assistant',
                 content: activeStreamContentRef.current,
+                sources: retrievedSources,
               };
             }
             return { ...c, messages: msgs };
@@ -701,6 +704,7 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
             msgs[msgs.length - 1] = {
               role: 'assistant',
               content: resolvedContent,
+              sources: response?.sources || retrievedSources,
             };
           }
           finalizedConv = {
@@ -986,7 +990,12 @@ export const PlaygroundView: React.FC<{ onBranchPrompt?: (conversationId: string
           <>
             <ConversationArea
               composer={composer}
-              onEditPrompt={(index, text) => onBranchPrompt ? onBranchPrompt(activeConvId, index, text) : setExternalInput({ conversationId: activeConvId, text })}
+              onEditPrompt={(index, text) => {
+                if (onBranchPrompt) { onBranchPrompt(activeConvId, index, text); return; }
+                const branchId = useAppStore.getState().branchConversation(activeConvId, index - 1);
+                chatDrafts.set(branchId, { text });
+                setExternalInput({ conversationId: branchId, text });
+              }}
               messages={activeConv?.messages || []}
               isGenerating={isGenerating}
               selectedModel={activeModel}
