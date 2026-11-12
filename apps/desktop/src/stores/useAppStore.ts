@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../api/client';
+import { branchThrough, canSaveMemory, installConversationPrivacy, mergeHistory, savedHistory } from '../features/conversations/lifecycle';
+import { useProjects } from '../features/projects/useProjects';
 import type {
   HardwareProfile,
   CapabilityProfile,
@@ -47,7 +49,9 @@ export type NavTab =
   | 'performance'
   | 'logs'
   | 'benchmark'
-  | 'settings';
+  | 'settings'
+  | 'library'
+  | 'projects';
 
 interface AppStore {
   activeTab: NavTab;
@@ -206,7 +210,15 @@ interface AppStore {
   toggleSidebar: () => void;
   setConversations: (updater: PlaygroundConversation[] | ((prev: PlaygroundConversation[]) => PlaygroundConversation[])) => void;
   setActiveConvId: (id: string) => void;
-  createNewChat: () => string;
+  createNewChat: (options?: { temporary?: boolean; projectId?: string }) => string;
+  archiveChat: (id: string) => void;
+  restoreChat: (id: string) => void;
+  updateChatOptions: (id: string, patch: Partial<Pick<PlaygroundConversation, 'pinned' | 'projectId' | 'memoryEnabled' | 'memorySaveEnabled'>>) => void;
+  branchConversation: (id: string, messageIndex: number) => string;
+  deletedChats: PlaygroundConversation[];
+  permanentlyDeleteChat: (id: string) => Promise<void>;
+  undoAction?: { label: string; chat: PlaygroundConversation };
+  undoChatAction: () => void;
   selectChat: (id: string) => void;
   deleteChat: (id: string) => void;
   renameChat: (id: string, newTitle: string) => void;
@@ -278,8 +290,8 @@ function loadStoredConversations(initialPersonaId?: string): { conversations: Pl
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return {
-            conversations: parsed,
-            activeConvId: parsed[0].id,
+            conversations: savedHistory(parsed),
+            activeConvId: parsed.find((chat: PlaygroundConversation) => chat.id === localStorage.getItem('zaylo_active_conversation') && !chat.archivedAt && !chat.temporary)?.id || parsed.find((chat: PlaygroundConversation) => !chat.archivedAt && !chat.temporary)?.id || '',
           };
         }
       }
@@ -298,49 +310,14 @@ function loadStoredConversations(initialPersonaId?: string): { conversations: Pl
     updatedAt: Date.now(),
     personaId: initialPersonaId || 'persona_general',
   };
-  const sample1: PlaygroundConversation = {
-    id: 'conv_sample_sql',
-    title: 'SQL Optimization',
-    modelId: '',
-    modelName: '',
-    messages: [
-      { role: 'user', content: 'How do I optimize complex SQLite joins with indexing?' },
-      { role: 'assistant', content: 'To optimize complex SQLite joins with indexing, follow these key strategies:\n\n1. **Create Composite Indexes**: Index foreign keys used in `JOIN ON` conditions.\n2. **Run `EXPLAIN QUERY PLAN`**: Verify whether SQLite is using an indexed search or table scan.\n3. **Analyze Statistics**: Run `ANALYZE;` periodically to populate `sqlite_stat1` for the query optimizer.' }
-    ],
-    createdAt: Date.now() - 3600000,
-    updatedAt: Date.now() - 3500000,
-    personaId: 'persona_developer',
-  };
-  const sample2: PlaygroundConversation = {
-    id: 'conv_sample_db',
-    title: 'SQLite vs PostgreSQL',
-    modelId: '',
-    modelName: '',
-    messages: [
-      { role: 'user', content: 'What are the architectural trade-offs between embedded SQLite and PostgreSQL for local AI apps?' },
-      { role: 'assistant', content: 'When comparing SQLite and PostgreSQL for local AI applications:\n\n- **SQLite**: Zero configuration, single-file storage, extremely low latency for single-process embedded apps. Perfect for local vector stores with `sqlite-vec`.\n- **PostgreSQL**: Robust concurrency, rich data types (`pgvector`), and advanced connection pooling. Ideal for multi-user local network deployments.' }
-    ],
-    createdAt: Date.now() - 7200000,
-    updatedAt: Date.now() - 7100000,
-    personaId: 'persona_analyst',
-  };
-  const sample3: PlaygroundConversation = {
-    id: 'conv_sample_rag',
-    title: 'Local RAG Setup',
-    modelId: '',
-    modelName: '',
-    messages: [
-      { role: 'user', content: 'How does Zaylo index local markdown files for RAG retrieval?' },
-      { role: 'assistant', content: 'Zaylo processes local markdown documents through a 3-stage pipeline:\n\n1. **Chunking**: Text is split into semantic paragraphs with configurable chunk overlap.\n2. **Embedding**: Chunks are embedded locally using the integrated embedding model.\n3. **Cosine Similarity Search**: At query time, top-$k$ nearest chunks are injected directly into the persona prompt context.' }
-    ],
-    createdAt: Date.now() - 10800000,
-    updatedAt: Date.now() - 10700000,
-    personaId: 'persona_researcher',
-  };
-  return {
-    conversations: [initialConv, sample1, sample2, sample3],
-    activeConvId: initialId,
-  };
+  return { conversations: [initialConv], activeConvId: initialId };
+}
+
+function loadLocal<T>(key: string, fallback: T): T {
+  try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
+}
+function storeLocal(key: string, value: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Device storage unavailable. */ }
 }
 
 const initialConvsData = loadStoredConversations();
@@ -358,22 +335,26 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) => {
       const next = typeof updater === 'function' ? updater(state.conversations) : updater;
       try {
-        localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(savedHistory(next)));
       } catch {}
       return { conversations: next };
     });
   },
-  setActiveConvId: (id) => set({ activeConvId: id }),
-  createNewChat: () => {
+  setActiveConvId: (id) => {
+    set({ activeConvId: id });
+  },
+  createNewChat: (options) => {
     const state = get();
-    const newId = `conv_${Date.now()}`;
+    const newId = `conv_${crypto.randomUUID()}`;
     const initialPersona = PersonaResolver.resolve(state.activePersonaId, state.personas, state.defaultPersonaId);
     const initialMessages: ChatMessage[] = initialPersona?.greetingMessage
       ? [{ role: 'assistant', content: initialPersona.greetingMessage }]
       : [];
     const newConv: PlaygroundConversation = {
       id: newId,
-      title: 'New Chat',
+      title: options?.temporary ? 'Temporary chat' : 'New Chat',
+      temporary: options?.temporary,
+      projectId: options?.projectId,
       modelId: state.selectedModel || '',
       modelName: state.selectedModel || '',
       messages: initialMessages,
@@ -383,53 +364,65 @@ export const useAppStore = create<AppStore>((set, get) => ({
     };
     const nextConvs = [newConv, ...state.conversations];
     try {
-      localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(nextConvs));
+      localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(savedHistory(nextConvs)));
     } catch {}
     set({
       conversations: nextConvs,
       activeConvId: newId,
       activeTab: 'playground',
     });
-    if (state.loftyDbStatus?.connected) {
-      void api.invoke('memory:save-conversation', newConv).catch(() => {});
-    }
+    void get().persistConversationToLoftyDb(newConv);
     return newId;
   },
   selectChat: (id) => {
     set({ activeConvId: id, activeTab: 'playground' });
   },
+  deletedChats: loadLocal<PlaygroundConversation[]>('zaylo_deleted_chats', []),
   deleteChat: (id) => {
-    const wasConnected = Boolean(get().loftyDbStatus?.connected);
-    set((state) => {
-      const remaining = state.conversations.filter((c) => c.id !== id);
-      let nextActive = state.activeConvId;
-      if (state.activeConvId === id) {
-        nextActive = remaining[0]?.id || `conv_${Date.now()}`;
-        if (remaining.length === 0) {
-          const freshConv: PlaygroundConversation = {
-            id: nextActive,
-            title: 'New Chat',
-            modelId: state.selectedModel || '',
-            modelName: state.selectedModel || '',
-            messages: [],
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            personaId: state.activePersonaId,
-          };
-          remaining.push(freshConv);
-        }
-      }
-      try {
-        localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(remaining));
-      } catch {}
-      return {
-        conversations: remaining,
-        activeConvId: nextActive,
-      };
-    });
-    if (wasConnected) {
-      void api.invoke('memory:delete-conversation', { id }).catch(() => {});
-    }
+    const chat = get().conversations.find(c => c.id === id);
+    if (!chat) return;
+    const deletedChats = [...get().deletedChats.filter(c => c.id !== id), chat];
+    set({ deletedChats, undoAction: { label: 'Chat deleted', chat } });
+    get().setConversations(prev => prev.filter(c => c.id !== id));
+    if (get().activeConvId === id) get().createNewChat();
+  },
+  permanentlyDeleteChat: async (id) => {
+    const chat = get().deletedChats.find(c => c.id === id);
+    if (!chat) return;
+    if (!chat.temporary) await api.invoke('memory:delete-conversation', { id });
+    const blocked = loadLocal<string[]>('zaylo_deleted_ids', []);
+    storeLocal('zaylo_deleted_ids', [...new Set([...blocked, id])]);
+    set(state => ({ deletedChats: state.deletedChats.filter(c => c.id !== id), undoAction: state.undoAction?.chat.id === id ? undefined : state.undoAction }));
+  },
+  archiveChat: (id) => {
+    const chat = get().conversations.find(c => c.id === id);
+    if (!chat || chat.temporary) return;
+    get().setConversations(prev => prev.map(c => c.id === id ? { ...c, archivedAt: Date.now() } : c));
+    set({ undoAction: { label: 'Chat archived', chat } });
+    if (get().activeConvId === id) get().createNewChat();
+  },
+  restoreChat: (id) => {
+    const deleted = get().deletedChats.find(c => c.id === id);
+    if (deleted) {
+      get().setConversations(prev => [deleted, ...prev.filter(c => c.id !== id)]);
+      set(state => ({ deletedChats: state.deletedChats.filter(c => c.id !== id) }));
+    } else get().setConversations(prev => prev.map(c => c.id === id ? { ...c, archivedAt: undefined } : c));
+  },
+  undoChatAction: () => {
+    const action = get().undoAction;
+    if (!action) return;
+    get().setConversations(prev => [action.chat, ...prev.filter(c => c.id !== action.chat.id)]);
+    set(state => ({ deletedChats: state.deletedChats.filter(c => c.id !== action.chat.id), undoAction: undefined }));
+  },
+  updateChatOptions: (id, patch) => get().setConversations(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c)),
+  branchConversation: (id, messageIndex) => {
+    const chat = get().conversations.find(c => c.id === id);
+    if (!chat) throw new Error('Conversation no longer exists.');
+    const branch = branchThrough(chat, messageIndex);
+    get().setConversations(prev => [branch, ...prev]);
+    get().selectChat(branch.id);
+    void get().persistConversationToLoftyDb(branch);
+    return branch.id;
   },
   renameChat: (id, newTitle) => {
     let renamedConv: PlaygroundConversation | undefined;
@@ -442,13 +435,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return c;
       });
       try {
-        localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(updated));
+        localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(savedHistory(updated)));
       } catch {}
       return { conversations: updated };
     });
-    if (renamedConv && get().loftyDbStatus?.connected) {
-      void api.invoke('memory:save-conversation', renamedConv).catch(() => {});
-    }
+    if (renamedConv) void get().persistConversationToLoftyDb(renamedConv);
   },
 
   theme: getInitialTheme(),
@@ -700,24 +691,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (!get().loftyDbStatus?.connected) return;
     try {
       const localConvs = get().conversations;
-      const merged = await api.invoke('memory:sync-conversations', { conversations: localConvs });
-      if (Array.isArray(merged) && merged.length > 0) {
-        const activeId = get().activeConvId;
-        const resolvedActiveId = merged.some((c) => c.id === activeId) ? activeId : merged[0].id;
-        try {
-          localStorage.setItem(PLAYGROUND_STORAGE_KEY, JSON.stringify(merged));
-        } catch {}
-        set({
-          conversations: merged,
-          activeConvId: resolvedActiveId,
-        });
-      }
+      const blocked = [...get().deletedChats.map(c => c.id), ...loadLocal<string[]>('zaylo_deleted_ids', [])];
+      const remote = await api.invoke('memory:sync-conversations', { conversations: localConvs.filter(canSaveMemory) });
+      // Re-read after awaiting: streaming edits, archive and deletion may have happened meanwhile.
+      get().setConversations(mergeHistory(get().conversations, remote || [], [...blocked, ...get().deletedChats.map(c => c.id), ...loadLocal<string[]>('zaylo_deleted_ids', [])]));
     } catch (err) {
       console.error('Failed to sync conversations with LoftyDB:', err);
     }
   },
   persistConversationToLoftyDb: async (conv) => {
-    if (!get().loftyDbStatus?.connected) return;
+    if (!get().loftyDbStatus?.connected || !canSaveMemory(conv)) return;
     try {
       await api.invoke('memory:save-conversation', conv);
     } catch (err) {
@@ -1147,3 +1130,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ isGenerating: false });
   },
 }));
+
+// All UI request paths share this boundary, including Playground's direct inference calls.
+installConversationPrivacy(api, () => {
+  const state = useAppStore.getState();
+  const chat = state.conversations.find(c => c.id === state.activeConvId);
+  return {
+    conversations: state.conversations, activeConvId: state.activeConvId,
+    blocked: [...state.deletedChats.map(c => c.id), ...loadLocal<string[]>('zaylo_deleted_ids', [])],
+    instructions: useProjects.getState().projects.find(p => p.id === chat?.projectId)?.instructions,
+  };
+});
+useAppStore.subscribe((state, previous) => {
+  if (state.activeConvId !== previous.activeConvId || state.conversations !== previous.conversations) {
+    const chat = state.conversations.find(c => c.id === state.activeConvId);
+    storeLocal('zaylo_active_conversation', chat && !chat.temporary && !chat.archivedAt ? chat.id : null);
+  }
+  if (state.deletedChats !== previous.deletedChats) storeLocal('zaylo_deleted_chats', savedHistory(state.deletedChats));
+});
