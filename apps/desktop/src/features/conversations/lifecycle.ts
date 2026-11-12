@@ -47,8 +47,8 @@ export function installConversationPrivacy(
     }
     if (channel === 'inference:chat' && id) {
       const recall = Boolean(payload.memory && canRecallMemory(chat));
-      payload = { ...payload, memory: recall && canSaveMemory(chat) };
-      // The backend couples automatic recall and extraction. Recall explicitly when saving is off.
+      payload = { ...payload, memory: recall && canSaveMemory(chat), memorySave: Boolean((payload.memorySave ?? payload.memory) && canSaveMemory(chat)) };
+      // Explicit read-only recall also supports backends predating memorySave.
       if (recall && !canSaveMemory(chat)) {
         const lastUser = [...payload.messages].reverse().find((message: any) => message.role === 'user');
         const query = typeof lastUser?.content === 'string' ? lastUser.content : lastUser?.content?.filter((part: any) => part.type === 'text').map((part: any) => part.text).join(' ');
