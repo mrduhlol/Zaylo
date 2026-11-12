@@ -27,6 +27,13 @@ export interface PlaygroundConversation {
   updatedAt: number;
   lastStats?: InferenceGenerationStats;
   personaId?: string;
+  pinned?: boolean;
+  archivedAt?: number;
+  temporary?: boolean;
+  memoryEnabled?: boolean;
+  memorySaveEnabled?: boolean;
+  projectId?: string;
+  parentConversationId?: string;
 }
 
 export interface GenerationSettings {
