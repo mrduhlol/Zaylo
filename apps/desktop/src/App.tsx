@@ -10,6 +10,8 @@ import { useWorkspaceShortcuts } from './features/settings/useWorkspaceShortcuts
 import { OverviewView } from './features/overview/OverviewView';
 import { ModelsView } from './features/models/ModelsView';
 import { ForgeView } from './features/forge/ForgeView';
+import { LibraryView } from './features/library/LibraryView';
+import { ProjectsView } from './features/projects/ProjectsView';
 import { PlaygroundView } from './features/playground/PlaygroundView';
 import { PersonasView } from './features/personas/PersonasView';
 import { LoftyDbView } from './features/loftydb/LoftyDbView';
@@ -58,7 +60,7 @@ export const App: React.FC = () => {
           const left = a as typeof a & { pinned?: boolean; archived?: boolean };
           const right = b as typeof b & { pinned?: boolean; archived?: boolean };
           return Number(Boolean(right.pinned)) - Number(Boolean(left.pinned)) || b.updatedAt - a.updatedAt;
-        }).filter(chat => !(chat as typeof chat & { archived?: boolean }).archived);
+        }).filter(chat => !chat.archivedAt && !chat.temporary);
         if (ordered[index]) state.selectChat(ordered[index].id);
       };
     }
@@ -218,6 +220,8 @@ export const App: React.FC = () => {
           {activeTab === 'models' && <ModelsView />}
           {activeTab === 'forge' && <ForgeView />}
           {activeTab === 'playground' && <PlaygroundView />}
+          {activeTab === 'library' && <LibraryView />}
+          {activeTab === 'projects' && <ProjectsView />}
           {activeTab === 'personas' && <PersonasView />}
           {activeTab === 'loftydb' && <LoftyDbView />}
           {activeTab === 'server' && <ServerApiView />}
