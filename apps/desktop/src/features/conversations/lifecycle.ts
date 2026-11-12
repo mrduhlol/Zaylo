@@ -8,8 +8,8 @@ export const canRecallMemory = (chat?: PlaygroundConversation) =>
 export const savedHistory = (chats: PlaygroundConversation[]) => chats.filter(chat => !chat.temporary);
 
 export function branchThrough(chat: PlaygroundConversation, messageIndex: number): PlaygroundConversation {
-  if (!Number.isInteger(messageIndex) || messageIndex < 0 || messageIndex >= chat.messages.length) {
-    throw new Error('Choose an existing message to branch from.');
+  if (!Number.isInteger(messageIndex) || messageIndex < -1 || messageIndex >= chat.messages.length) {
+    throw new Error('Choose an existing message or the beginning of the conversation.');
   }
   const now = Date.now();
   return {
