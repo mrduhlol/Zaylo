@@ -76,6 +76,9 @@ describe('conversation state and recovery', () => {
     expect(branch.id).not.toBe(original.id);
     expect(branch.messages).toHaveLength(1);
     expect(branch.messages[0].content).not.toBe(original.messages[0].content);
+    expect(branchThrough(original, -1).messages).toEqual([]);
+    expect(original.messages).toHaveLength(2);
+    expect(() => branchThrough(original, -2)).toThrow();
     expect(() => branchThrough(original, 5)).toThrow();
   });
 
