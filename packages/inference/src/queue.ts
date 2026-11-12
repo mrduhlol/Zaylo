@@ -22,22 +22,39 @@ export class RequestQueue {
     this.processNext();
   }
 
-  public async acquire(): Promise<() => void> {
+  public async acquire(signal?: AbortSignal): Promise<() => void> {
+    signal?.throwIfAborted();
     if (this.activeCount < this.maxConcurrent) {
       this.activeCount++;
-      return () => this.release();
+      return this.createRelease();
     }
 
     if (this.queue.length >= this.maxQueueSize) {
       throw new RateLimitError('Inference server queue is full. Try again shortly.');
     }
 
-    return new Promise<() => void>((resolve) => {
-      this.queue.push(() => {
+    return new Promise<() => void>((resolve, reject) => {
+      const onAbort = () => {
+        this.queue = this.queue.filter((entry) => entry !== grant);
+        reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+      };
+      const grant = () => {
+        signal?.removeEventListener('abort', onAbort);
         this.activeCount++;
-        resolve(() => this.release());
-      });
+        resolve(this.createRelease());
+      };
+      this.queue.push(grant);
+      signal?.addEventListener('abort', onAbort, { once: true });
     });
+  }
+
+  private createRelease(): () => void {
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.release();
+    };
   }
 
   private release(): void {
@@ -46,7 +63,7 @@ export class RequestQueue {
   }
 
   private processNext(): void {
-    if (this.activeCount < this.maxConcurrent && this.queue.length > 0) {
+    while (this.activeCount < this.maxConcurrent && this.queue.length > 0) {
       const next = this.queue.shift();
       next?.();
     }
