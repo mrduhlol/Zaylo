@@ -133,3 +133,59 @@ voice/status into reviewable changes rather than a giant PR. Increment package
 versions consistently when appropriate. Test existing tools as well as new flows.
 No exactness/perfection claims without visual/runtime evidence; call out remaining
 limitations honestly. Link every PR immediately after creation or push to it.
+
+## Delivery status — 2026-11-12
+
+The combined implementation is committed and pushed on the fork's
+`feat/v4-workspace` branch. Its manifests and native version metadata are prepared
+for 4.0.0; no release or installer has been published.
+
+Focused upstream drafts currently open:
+
+- [#3 — Appearance foundation](https://github.com/loftytechlabs-dev/Zaylo/pull/3):
+  palettes, offline fonts, shared artwork, presentation preferences and effects.
+- [#4 — Local voice and PDF services](https://github.com/loftytechlabs-dev/Zaylo/pull/4):
+  local speech setup/transcription, trusted IPC, cancellation and PDF export.
+- [#5 — Chat request lifecycle](https://github.com/loftytechlabs-dev/Zaylo/pull/5):
+  early/queued cancellation, stream correlation, memory consent and source provenance.
+- [#6 — Workspace data](https://github.com/loftytechlabs-dev/Zaylo/pull/6):
+  conversation lifecycle, projects, Library, saved outputs and memory inspection.
+- [#7 — Personas](https://github.com/loftytechlabs-dev/Zaylo/pull/7):
+  gallery/editor, defaults, per-chat selection, import/export and previews.
+
+The independent 3.3.0 security/stability work is in upstream PRs #1 and #2.
+Its validated fixes are carried forward in the combined 4.0 branch. Review the
+prerequisites before merging dependent drafts; shared-store overlap must be
+updated against the accepted upstream base. Do not force-push published history.
+
+Three follow-up topics remain to be submitted from that accepted base:
+
+1. Workspace shell/settings integration: App, Sidebar, Header, Settings,
+   shortcuts, illustrated theme controls and collapse behavior.
+2. Chat experience integration: composer, recording surface, centered greetings,
+   drafts/attachments, source passages, temporary-image guard and background media.
+3. 4.0 release metadata and final integration validation.
+
+Those changes are already implemented and verified together on the integration
+branch. Do not submit that entire branch as one rollup PR or duplicate all the
+unmerged prerequisites into each UI PR.
+
+Local verification of the combined branch:
+
+- Full regression suite: 164 tests across 24 files passed.
+- Workspace checks: 30 typecheck tasks and 16 build tasks passed; subsequent
+  desktop TypeScript and renderer/Electron production builds passed after UI fixes.
+- Headless renderer checks cover all five palettes in light/dark, inherited
+  tokens, default greetings/startup, real MediaRecorder with a fixture transcription
+  boundary, draft-plus-dictation auto-send, focused transcript review, temporary
+  image blocking, memory inspection, popup hit testing and collapsed layout.
+- macOS control spacing was simulated in the renderer; this is not native macOS
+  window or installer verification. No desktop UI or workspace focus was changed.
+- A separate Linux/Python 3.12 CPU smoke test transcribed a local audio sample
+  with offline model flags.
+
+Still unverified: packaged Electron microphone permissions and PDF output,
+macOS/Windows installers, full native media loop/performance behavior, and every
+source frame. The procedural clouds are original code; bundled clips remain
+accurately described as video, not a live text recreation. Existing Vite browser
+externalization, bundle-size and pnpm configuration warnings remain visible.
